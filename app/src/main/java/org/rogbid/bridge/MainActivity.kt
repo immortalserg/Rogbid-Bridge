@@ -32,20 +32,33 @@ class MainActivity : Activity() {
   val host = field("Broker IP / hostname", prefs.getString("host", "") ?: "")
   val port = field("Port: 1883 or 8883", prefs.getString("port", "1883") ?: "1883", InputType.TYPE_CLASS_NUMBER)
   val user = field("Username", prefs.getString("user", "") ?: "")
-  val pass = field("Password (saved locally when auto sync starts)", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+  val pass = field("MQTT password (visible for testing)", prefs.getString("password", "") ?: "")
   val device = field("Device ID", prefs.getString("device", "king") ?: "king")
   val button = Button(this).apply { text = "Send MQTT test" }
-  val startSync = Button(this).apply { text = "Start auto sync (5 min)" }
+  val interval = field("Interval in minutes (1-60)", prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
+  val startSync = Button(this).apply { text = "Start auto sync" }
   val stopSync = Button(this).apply { text = "Stop auto sync" }
+  val refresh = Button(this).apply { text = "Show sync status" }
   val status = TextView(this).apply { textSize = 15f }
   layout.addView(button)
   layout.addView(startSync)
   layout.addView(stopSync)
+  layout.addView(refresh)
   layout.addView(status)
+  refresh.setOnClickListener {
+   status.text = "Auto enabled: " + prefs.getBoolean("auto", false) +
+    "\\nLast attempt: " + prefs.getString("last_attempt", "none") +
+    "\\nLast result: " + prefs.getString("last_sync", "none")
+  }
   startSync.setOnClickListener {
    val hostname = host.text.toString().trim()
    val number = port.text.toString().toIntOrNull()
    val id = device.text.toString().trim()
+   val minutes = interval.text.toString().toIntOrNull()
+   if (minutes == null || minutes !in 1..60) {
+    status.text = "Interval must be 1 to 60 minutes"
+    return@setOnClickListener
+   }
    if (hostname.isBlank() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
     status.text = "Check host, port and device ID"
@@ -53,11 +66,11 @@ class MainActivity : Activity() {
     val editor = prefs.edit().putString("host", hostname)
      .putString("port", number.toString()).putString("user", user.text.toString())
      .putString("device", id).putBoolean("auto", true)
-    // Saved in app-private preferences for unattended sync; never sent to GitHub.
-    if (pass.text.isNotEmpty()) editor.putString("password", pass.text.toString())
+     .putInt("interval_minutes", minutes)
+     .putString("password", pass.text.toString())
     editor.apply()
     startForegroundService(Intent(this, SyncService::class.java))
-    status.text = "Auto sync started (5 min). Password stored in app-private preferences."
+    status.text = "Auto sync requested every " + minutes + " minute(s). Check status after 1-2 intervals."
    }
   }
   stopSync.setOnClickListener {
@@ -84,7 +97,8 @@ class MainActivity : Activity() {
    val login = user.text.toString()
    val password = pass.text.toString()
    prefs.edit().putString("host", hostname).putString("port", number.toString())
-    .putString("user", login).putString("device", id).apply()
+    .putString("user", login).putString("device", id)
+    .putString("password", password).apply()
    button.isEnabled = false
    status.text = "Connecting..."
    Thread {
