@@ -55,11 +55,12 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rogbid-release.jks"
           echo "ROGBID_KEYSTORE_PATH=$RUNNER_TEMP/rogbid-release.jks" >> "$GITHUB_ENV"
-          echo "ROGBID_KEYSTORE_PASSWORD=$ROGBID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "ROGBID_KEY_ALIAS=$ROGBID_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "ROGBID_KEY_PASSWORD=$ROGBID_KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Build signed release APK
         if: github.event_name != 'pull_request'
+        env:
+          ROGBID_KEYSTORE_PASSWORD: ${{ secrets.ROGBID_KEYSTORE_PASSWORD }}
+          ROGBID_KEY_ALIAS: ${{ secrets.ROGBID_KEY_ALIAS }}
+          ROGBID_KEY_PASSWORD: ${{ secrets.ROGBID_KEY_PASSWORD }}
         run: gradle :app:assembleRelease --no-daemon
       - name: Remove signing key from runner
         if: always()
