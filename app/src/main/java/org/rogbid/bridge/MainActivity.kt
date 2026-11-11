@@ -1,6 +1,7 @@
 package org.rogbid.bridge
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -31,12 +32,39 @@ class MainActivity : Activity() {
   val host = field("Broker IP / hostname", prefs.getString("host", "") ?: "")
   val port = field("Port: 1883 or 8883", prefs.getString("port", "1883") ?: "1883", InputType.TYPE_CLASS_NUMBER)
   val user = field("Username", prefs.getString("user", "") ?: "")
-  val pass = field("Password (not saved)", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+  val pass = field("Password (saved locally when auto sync starts)", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
   val device = field("Device ID", prefs.getString("device", "king") ?: "king")
   val button = Button(this).apply { text = "Send MQTT test" }
+  val startSync = Button(this).apply { text = "Start auto sync (5 min)" }
+  val stopSync = Button(this).apply { text = "Stop auto sync" }
   val status = TextView(this).apply { textSize = 15f }
   layout.addView(button)
+  layout.addView(startSync)
+  layout.addView(stopSync)
   layout.addView(status)
+  startSync.setOnClickListener {
+   val hostname = host.text.toString().trim()
+   val number = port.text.toString().toIntOrNull()
+   val id = device.text.toString().trim()
+   if (hostname.isBlank() || number == null || number !in 1..65535 ||
+    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    status.text = "Check host, port and device ID"
+   } else {
+    val editor = prefs.edit().putString("host", hostname)
+     .putString("port", number.toString()).putString("user", user.text.toString())
+     .putString("device", id).putBoolean("auto", true)
+    // Saved in app-private preferences for unattended sync; never sent to GitHub.
+    if (pass.text.isNotEmpty()) editor.putString("password", pass.text.toString())
+    editor.apply()
+    startForegroundService(Intent(this, SyncService::class.java))
+    status.text = "Auto sync started (5 min). Password stored in app-private preferences."
+   }
+  }
+  stopSync.setOnClickListener {
+   stopService(Intent(this, SyncService::class.java))
+   prefs.edit().putBoolean("auto", false).apply()
+   status.text = "Auto sync stopped"
+  }
   setContentView(ScrollView(this).apply { addView(layout) })
   try {
    val steps = Settings.System.getInt(contentResolver, "today_steps")
