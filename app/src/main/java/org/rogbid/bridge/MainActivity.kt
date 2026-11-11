@@ -128,6 +128,7 @@ class MainActivity : Activity() {
    Thread {
     try {
      val data = JSONObject()
+     data.put("last_update", java.time.Instant.now().toString())
      data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
      // Vendor firmware exposes the most recent measurements in Settings.System.
      val heartRate = Settings.System.getInt(contentResolver, "heart_rate", -1)
@@ -158,6 +159,37 @@ class MainActivity : Activity() {
       }
       client.connect(options)
       val topic = "rogbid/" + id + "/state"
+      val device = JSONObject().apply {
+       put("identifiers", org.json.JSONArray().put("rogbid_" + id))
+       put("name", "Rogbid " + id)
+       put("manufacturer", "Rogbid")
+       put("model", "Z10")
+      }
+      fun discovery(key: String, label: String, unit: String?, deviceClass: String?, stateClass: String?) {
+       val config = JSONObject().apply {
+        put("name", label)
+        put("unique_id", "rogbid_" + id + "_" + key)
+        put("state_topic", topic)
+        put("value_template", "{{ value_json." + key + " }}")
+        put("availability_topic", topic)
+        put("availability_template", "{{ 'online' if value_json." + key + " is defined else 'offline' }}")
+        put("payload_available", "online")
+        put("payload_not_available", "offline")
+        put("device", device)
+        if (unit != null) put("unit_of_measurement", unit)
+        if (deviceClass != null) put("device_class", deviceClass)
+        if (stateClass != null) put("state_class", stateClass)
+       }
+       client.publish("homeassistant/sensor/rogbid_" + id + "/" + key + "/config",
+        MqttMessage(config.toString().toByteArray(Charsets.UTF_8)).apply {
+         qos = 1
+         isRetained = true
+        })
+      }
+      discovery("steps", "Steps", "steps", null, "total_increasing")
+      discovery("heart_rate", "Heart Rate", "bpm", null, "measurement")
+      discovery("spo2", "SpO2", "%", null, "measurement")
+      discovery("last_update", "Last Update", null, "timestamp", null)
       client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
        qos = 1
        isRetained = true
