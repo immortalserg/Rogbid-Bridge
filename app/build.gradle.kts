@@ -12,6 +12,26 @@ android {
   versionCode = 2
   versionName = "0.2.0-dev"
  }
+ lint {
+  disable += "ExpiredTargetSdkVersion"
+ }
+ signingConfigs {
+  create("releaseKey") {
+   val path = System.getenv("ROGBID_KEYSTORE_PATH")
+   if (!path.isNullOrBlank()) {
+    storeFile = file(path)
+    storePassword = System.getenv("ROGBID_KEYSTORE_PASSWORD")
+    keyAlias = System.getenv("ROGBID_KEY_ALIAS")
+    keyPassword = System.getenv("ROGBID_KEY_PASSWORD")
+   }
+  }
+ }
+ buildTypes {
+  getByName("release") {
+   isMinifyEnabled = false
+   signingConfig = signingConfigs.getByName("releaseKey")
+  }
+ }
  compileOptions {
   sourceCompatibility = JavaVersion.VERSION_17
   targetCompatibility = JavaVersion.VERSION_17
