@@ -1,51 +1,107 @@
 package org.rogbid.bridge
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.net.Uri
-import android.widget.ScrollView
-import android.widget.TextView
+import android.text.InputType
+import android.widget.*
+import org.eclipse.paho.client.mqttv3.*
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import org.json.JSONObject
 
 class MainActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val output = TextView(this).apply {
-            textSize = 16f
-            setPadding(24, 24, 24, 24)
+ override fun onCreate(savedInstanceState: Bundle?) {
+  super.onCreate(savedInstanceState)
+  val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
+  val layout = LinearLayout(this).apply {
+   orientation = LinearLayout.VERTICAL
+   setPadding(20, 20, 20, 20)
+  }
+  fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+   return EditText(this).apply {
+    hint = label
+    setText(value)
+    inputType = type
+    setSingleLine(true)
+    layout.addView(this)
+   }
+  }
+  layout.addView(TextView(this).apply { text = "Rogbid Bridge MQTT"; textSize = 20f })
+  val host = field("Broker IP / hostname", prefs.getString("host", "") ?: "")
+  val port = field("Port: 1883 or 8883", prefs.getString("port", "1883") ?: "1883", InputType.TYPE_CLASS_NUMBER)
+  val user = field("Username", prefs.getString("user", "") ?: "")
+  val pass = field("Password (not saved)", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+  val device = field("Device ID", prefs.getString("device", "king") ?: "king")
+  val button = Button(this).apply { text = "Send MQTT test" }
+  val status = TextView(this).apply { textSize = 15f }
+  layout.addView(button)
+  layout.addView(status)
+  setContentView(ScrollView(this).apply { addView(layout) })
+  try {
+   val steps = Settings.System.getInt(contentResolver, "today_steps")
+   val count = contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"), null, null, null, null)?.use { it.count }
+   status.text = "Steps: " + steps + "\nHistory rows: " + count
+  } catch (e: Exception) {
+   status.text = "Diagnostics error: " + e.message
+  }
+  button.setOnClickListener {
+   val hostname = host.text.toString().trim()
+   val number = port.text.toString().toIntOrNull()
+   val id = device.text.toString().trim()
+   if (hostname.isEmpty() || number == null || number !in 1..65535 || !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    status.text = "Check host, port and device ID"
+    return@setOnClickListener
+   }
+   val login = user.text.toString()
+   val password = pass.text.toString()
+   prefs.edit().putString("host", hostname).putString("port", number.toString())
+    .putString("user", login).putString("device", id).apply()
+   button.isEnabled = false
+   status.text = "Connecting..."
+   Thread {
+    try {
+     val data = JSONObject()
+     data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
+     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date DESC")?.use { cursor ->
+      if (cursor.moveToFirst()) {
+       for (name in arrayOf("date", "steps", "diatance", "kcal", "targetsteps")) {
+        val i = cursor.getColumnIndex(name)
+        if (i >= 0 && !cursor.isNull(i)) {
+         if (name == "date") data.put(name, cursor.getString(i))
+         else data.put(name, cursor.getLong(i))
         }
-        setContentView(ScrollView(this).apply { addView(output) })
-
-        val report = StringBuilder("Rogbid Bridge — diagnostics\n\n")
-        try {
-            val steps = Settings.System.getInt(contentResolver, "today_steps")
-            report.append("System today_steps: ").append(steps).append("\n")
-        } catch (e: Exception) {
-            report.append("System today_steps ERROR: ").append(e.javaClass.simpleName)
-                .append(": ").append(e.message).append("\n")
-        }
-
-        val uri = Uri.parse("content://com.watchHealth.Walk/query")
-        try {
-            contentResolver.query(
-                uri,
-                arrayOf("date", "steps", "diatance", "kcal", "targetsteps"),
-                null,
-                null,
-                "date DESC"
-            )?.use { cursor ->
-                report.append("History rows: ").append(cursor.count).append("\n")
-                if (cursor.moveToFirst()) {
-                    for (i in 0 until cursor.columnCount) {
-                        report.append(cursor.getColumnName(i)).append(": ")
-                            .append(cursor.getString(i)).append("\n")
-                    }
-                }
-            } ?: report.append("History provider returned null\n")
-        } catch (e: Exception) {
-            report.append("History ERROR: ").append(e.javaClass.simpleName)
-                .append(": ").append(e.message).append("\n")
-        }
-        output.text = report.toString()
+       }
+      }
+     }
+     val scheme = if (number == 8883) "ssl" else "tcp"
+     val client = MqttClient(scheme + "://" + hostname + ":" + number,
+      "rogbid-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
+     try {
+      val options = MqttConnectOptions().apply {
+       isCleanSession = true
+       connectionTimeout = 10
+       if (login.isNotBlank()) userName = login
+       if (password.isNotEmpty()) this.password = password.toCharArray()
+      }
+      client.connect(options)
+      val topic = "rogbid/" + id + "/state"
+      client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
+       qos = 1
+       isRetained = true
+      })
+      runOnUiThread { status.text = "Published " + topic + "\n" + data.toString() }
+     } finally {
+      if (client.isConnected) client.disconnect()
+      client.close()
+     }
+    } catch (e: Exception) {
+     runOnUiThread { status.text = "MQTT error: " + e.javaClass.simpleName + ": " + e.message }
+    } finally {
+     runOnUiThread { button.isEnabled = true }
     }
+   }.start()
+  }
+ }
 }
