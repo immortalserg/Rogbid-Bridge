@@ -13,19 +13,21 @@ class SyncService : Service() {
  private val worker = HandlerThread("RogbidMqttSync")
  private lateinit var handler: Handler
  @Volatile private var running = false
- private val intervalMs = 5 * 60 * 1000L
+ private fun intervalMs(): Long = (getSharedPreferences("mqtt", MODE_PRIVATE)
+  .getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L)
  private val sync = object : Runnable {
   override fun run() {
    if (!running) return
+   val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
+   prefs.edit().putString("last_attempt", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    try {
     publish()
-    getSharedPreferences("mqtt", MODE_PRIVATE).edit()
-     .putString("last_sync", "OK: " + System.currentTimeMillis()).apply()
+    prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    } catch (e: Exception) {
-    getSharedPreferences("mqtt", MODE_PRIVATE).edit()
-     .putString("last_sync", "ERROR: " + e.javaClass.simpleName + ": " + e.message).apply()
+    prefs.edit().putString("last_sync", "ERROR: " + e.javaClass.simpleName + ": " + e.message).apply()
+    android.util.Log.e("RogbidBridge", "MQTT sync failed", e)
    }
-   if (running) handler.postDelayed(this, intervalMs)
+   if (running) handler.postDelayed(this, intervalMs())
   }
  }
  override fun onCreate() {
@@ -39,7 +41,7 @@ class SyncService : Service() {
   val notification = Notification.Builder(this, "sync")
    .setSmallIcon(android.R.drawable.stat_notify_sync)
    .setContentTitle("Rogbid Bridge")
-   .setContentText("MQTT sync every 5 minutes")
+   .setContentText("MQTT background synchronization active")
    .setContentIntent(open)
    .setOngoing(true)
    .build()
@@ -51,10 +53,9 @@ class SyncService : Service() {
    stopSelf()
    return START_NOT_STICKY
   }
-  if (!running) {
-   running = true
-   handler.post(sync)
-  }
+  if (!running) running = true
+  handler.removeCallbacks(sync)
+  handler.post(sync)
   return START_STICKY
  }
  private fun publish() {
@@ -62,7 +63,7 @@ class SyncService : Service() {
   val host = prefs.getString("host", "") ?: ""
   val port = prefs.getString("port", "1883")?.toIntOrNull() ?: 1883
   val id = prefs.getString("device", "king") ?: "king"
-  if (host.isBlank() || !id.matches(Regex("[A-Za-z0-9_-]+"))) return
+  if (host.isBlank() || !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("MQTT host or device ID missing")
   val data = JSONObject()
   data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
   contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
