@@ -65,7 +65,7 @@ class MainActivity : Activity() {
        if (it.isNull(dateIndex)) continue
        val date = it.getString(dateIndex)?.trim().orEmpty()
        // Date is also used as a topic segment: reject unexpected provider values.
-       if (!date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) continue
+       if (!date.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) continue
        val data = JSONObject().put("date", date)
        for (name in arrayOf("steps", "diatance", "kcal", "targetsteps")) {
         val index = it.getColumnIndex(name)
@@ -78,7 +78,7 @@ class MainActivity : Activity() {
      val login = prefs.getString("user", "").orEmpty()
      val password = prefs.getString("password", "").orEmpty()
      val scheme = if (number == 8883) "ssl" else "tcp"
-     val client = MqttClient("$" + "{scheme}://$" + "{hostname}:$" + "{number}",
+     val client = MqttClient(scheme + "://" + hostname + ":" + number,
       "rogbid-history-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
      var published = 0
      try {
