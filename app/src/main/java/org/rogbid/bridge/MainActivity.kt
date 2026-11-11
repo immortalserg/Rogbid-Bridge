@@ -129,6 +129,11 @@ class MainActivity : Activity() {
     try {
      val data = JSONObject()
      data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
+     // Vendor firmware exposes the most recent measurements in Settings.System.
+     val heartRate = Settings.System.getInt(contentResolver, "heart_rate", -1)
+     if (heartRate in 1..250) data.put("heart_rate", heartRate)
+     val oxygen = Settings.System.getInt(contentResolver, "OXYGEN", -1)
+     if (oxygen in 1..100) data.put("spo2", oxygen)
      contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
       arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date DESC")?.use { cursor ->
       if (cursor.moveToFirst()) {
