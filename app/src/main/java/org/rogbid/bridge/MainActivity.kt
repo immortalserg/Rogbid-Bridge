@@ -30,13 +30,88 @@ class MainActivity : Activity() {
   val layout = page()
   layout.addView(TextView(this).apply { text = "Rogbid Bridge"; textSize = 24f })
   val button = Button(this).apply { text = "Send data to MQTT" }
+  val history = Button(this).apply { text = "Send history to MQTT" }
   val settings = Button(this).apply { text = "Settings" }
   val status = TextView(this).apply { textSize = 15f }
   layout.addView(button)
+  layout.addView(history)
   layout.addView(settings)
   layout.addView(status)
   show(layout)
   settings.setOnClickListener { showSettings() }
+  history.setOnClickListener {
+   val hostname = prefs.getString("host", "")?.trim().orEmpty()
+   val number = prefs.getString("port", "1883")?.toIntOrNull()
+   val id = prefs.getString("device", "king")?.trim().orEmpty()
+   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
+    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    status.text = "Open Settings and configure MQTT connection"
+    return@setOnClickListener
+   }
+   history.isEnabled = false
+   button.isEnabled = false
+   status.text = "Reading step history..."
+   Thread {
+    try {
+     val records = linkedMapOf<String, JSONObject>()
+     val uri = Uri.parse("content://com.watchHealth.Walk/query")
+     val cursor = contentResolver.query(uri,
+      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date ASC")
+      ?: throw IllegalStateException("History provider returned null")
+     cursor.use {
+      val dateIndex = it.getColumnIndex("date")
+      if (dateIndex < 0) throw IllegalStateException("Missing date column")
+      while (it.moveToNext()) {
+       if (it.isNull(dateIndex)) continue
+       val date = it.getString(dateIndex)?.trim().orEmpty()
+       // Date is also used as a topic segment: reject unexpected provider values.
+       if (!date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) continue
+       val data = JSONObject().put("date", date)
+       for (name in arrayOf("steps", "diatance", "kcal", "targetsteps")) {
+        val index = it.getColumnIndex(name)
+        if (index >= 0 && !it.isNull(index)) data.put(name, it.getLong(index))
+       }
+       records[date] = data
+      }
+     }
+     if (records.isEmpty()) throw IllegalStateException("No dated history records found")
+     val login = prefs.getString("user", "").orEmpty()
+     val password = prefs.getString("password", "").orEmpty()
+     val scheme = if (number == 8883) "ssl" else "tcp"
+     val client = MqttClient("$" + "{scheme}://$" + "{hostname}:$" + "{number}",
+      "rogbid-history-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
+     var published = 0
+     try {
+      val options = MqttConnectOptions().apply {
+       isCleanSession = true
+       connectionTimeout = 10
+       if (login.isNotBlank()) userName = login
+       if (password.isNotEmpty()) this.password = password.toCharArray()
+      }
+      client.connect(options)
+      for ((date, data) in records) {
+       client.publish("rogbid/" + id + "/history/" + date,
+        MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
+         qos = 1
+         isRetained = true
+        })
+       published++
+      }
+      runOnUiThread { status.text = "History published: " + published + " day(s)" }
+     } finally {
+      if (client.isConnected) client.disconnect()
+      client.close()
+     }
+    } catch (e: Exception) {
+     runOnUiThread { status.text = "History error: " + e.javaClass.simpleName + ": " + e.message }
+    } finally {
+     runOnUiThread {
+      history.isEnabled = true
+      button.isEnabled = true
+     }
+    }
+   }.start()
+  }
   button.setOnClickListener {
    val hostname = prefs.getString("host", "")?.trim().orEmpty()
    val number = prefs.getString("port", "1883")?.toIntOrNull()
