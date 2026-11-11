@@ -1,7 +1,6 @@
 package org.rogbid.bridge
 
 import android.app.Activity
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -12,93 +11,43 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
 
 class MainActivity : Activity() {
+ private val prefs by lazy { getSharedPreferences("mqtt", MODE_PRIVATE) }
+ private fun page(): LinearLayout = LinearLayout(this).apply {
+  orientation = LinearLayout.VERTICAL
+  setPadding(24, 24, 24, 24)
+ }
+ private fun show(view: LinearLayout) {
+  setContentView(ScrollView(this).apply { addView(view) })
+ }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-  val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
-  val layout = LinearLayout(this).apply {
-   orientation = LinearLayout.VERTICAL
-   setPadding(20, 20, 20, 20)
-  }
-  fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
-   return EditText(this).apply {
-    hint = label
-    setText(value)
-    inputType = type
-    setSingleLine(true)
-    layout.addView(this)
-   }
-  }
-  layout.addView(TextView(this).apply { text = "Rogbid Bridge MQTT"; textSize = 20f })
-  val host = field("Broker IP / hostname", prefs.getString("host", "") ?: "")
-  val port = field("Port: 1883 or 8883", prefs.getString("port", "1883") ?: "1883", InputType.TYPE_CLASS_NUMBER)
-  val user = field("Username", prefs.getString("user", "") ?: "")
-  val pass = field("MQTT password (visible for testing)", prefs.getString("password", "") ?: "")
-  val device = field("Device ID", prefs.getString("device", "king") ?: "king")
-  val button = Button(this).apply { text = "Send MQTT test" }
-  val interval = field("Interval in minutes (1-60)", prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
-  val startSync = Button(this).apply { text = "Start auto sync" }
-  val stopSync = Button(this).apply { text = "Stop auto sync" }
-  val refresh = Button(this).apply { text = "Show sync status" }
+  // Retire the experimental background worker on upgrade.
+  stopService(android.content.Intent(this, SyncService::class.java))
+  prefs.edit().putBoolean("auto", false).apply()
+  showHome()
+ }
+ private fun showHome() {
+  val layout = page()
+  layout.addView(TextView(this).apply { text = "Rogbid Bridge"; textSize = 24f })
+  val button = Button(this).apply { text = "Send data to MQTT" }
+  val settings = Button(this).apply { text = "Settings" }
   val status = TextView(this).apply { textSize = 15f }
   layout.addView(button)
-  layout.addView(startSync)
-  layout.addView(stopSync)
-  layout.addView(refresh)
+  layout.addView(settings)
   layout.addView(status)
-  refresh.setOnClickListener {
-   status.text = "Auto enabled: " + prefs.getBoolean("auto", false) +
-    "\\nLast attempt: " + prefs.getString("last_attempt", "none") +
-    "\\nLast result: " + prefs.getString("last_sync", "none")
-  }
-  startSync.setOnClickListener {
-   val hostname = host.text.toString().trim()
-   val number = port.text.toString().toIntOrNull()
-   val id = device.text.toString().trim()
-   val minutes = interval.text.toString().toIntOrNull()
-   if (minutes == null || minutes !in 1..60) {
-    status.text = "Interval must be 1 to 60 minutes"
-    return@setOnClickListener
-   }
-   if (hostname.isBlank() || number == null || number !in 1..65535 ||
-    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Check host, port and device ID"
-   } else {
-    val editor = prefs.edit().putString("host", hostname)
-     .putString("port", number.toString()).putString("user", user.text.toString())
-     .putString("device", id).putBoolean("auto", true)
-     .putInt("interval_minutes", minutes)
-     .putString("password", pass.text.toString())
-    editor.apply()
-    startForegroundService(Intent(this, SyncService::class.java))
-    status.text = "Auto sync requested every " + minutes + " minute(s). Check status after 1-2 intervals."
-   }
-  }
-  stopSync.setOnClickListener {
-   stopService(Intent(this, SyncService::class.java))
-   prefs.edit().putBoolean("auto", false).apply()
-   status.text = "Auto sync stopped"
-  }
-  setContentView(ScrollView(this).apply { addView(layout) })
-  try {
-   val steps = Settings.System.getInt(contentResolver, "today_steps")
-   val count = contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"), null, null, null, null)?.use { it.count }
-   status.text = "Steps: " + steps + "\nHistory rows: " + count
-  } catch (e: Exception) {
-   status.text = "Diagnostics error: " + e.message
-  }
+  show(layout)
+  settings.setOnClickListener { showSettings() }
   button.setOnClickListener {
-   val hostname = host.text.toString().trim()
-   val number = port.text.toString().toIntOrNull()
-   val id = device.text.toString().trim()
-   if (hostname.isEmpty() || number == null || number !in 1..65535 || !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Check host, port and device ID"
+   val hostname = prefs.getString("host", "")?.trim().orEmpty()
+   val number = prefs.getString("port", "1883")?.toIntOrNull()
+   val id = prefs.getString("device", "king")?.trim().orEmpty()
+   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
+    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    status.text = "Open Settings and configure MQTT connection"
     return@setOnClickListener
    }
-   val login = user.text.toString()
-   val password = pass.text.toString()
-   prefs.edit().putString("host", hostname).putString("port", number.toString())
-    .putString("user", login).putString("device", id)
-    .putString("password", password).apply()
+   val login = prefs.getString("user", "").orEmpty()
+   val password = prefs.getString("password", "").orEmpty()
    button.isEnabled = false
    status.text = "Connecting..."
    Thread {
@@ -146,4 +95,43 @@ class MainActivity : Activity() {
    }.start()
   }
  }
+ private fun showSettings() {
+  val layout = page()
+  layout.addView(TextView(this).apply { text = "MQTT Settings"; textSize = 22f })
+  fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText =
+   EditText(this).apply {
+    hint = label
+    setText(value)
+    inputType = type
+    setSingleLine(true)
+    layout.addView(this)
+   }
+  val host = field("Broker IP / hostname", prefs.getString("host", "").orEmpty())
+  val port = field("Port", prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
+  val user = field("Username", prefs.getString("user", "").orEmpty())
+  val pass = field("Password (visible during testing)", prefs.getString("password", "").orEmpty())
+  val device = field("Device ID", prefs.getString("device", "king").orEmpty())
+  val save = Button(this).apply { text = "Save settings" }
+  val back = Button(this).apply { text = "Back" }
+  val status = TextView(this)
+  layout.addView(save)
+  layout.addView(back)
+  layout.addView(status)
+  save.setOnClickListener {
+   val p = port.text.toString().toIntOrNull()
+   val d = device.text.toString().trim()
+   if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
+    !d.matches(Regex("[A-Za-z0-9_-]+"))) {
+    status.text = "Invalid host, port or device ID"
+   } else {
+    prefs.edit().putString("host", host.text.toString().trim())
+     .putString("port", p.toString()).putString("user", user.text.toString())
+     .putString("password", pass.text.toString()).putString("device", d).apply()
+    showHome()
+   }
+  }
+  back.setOnClickListener { showHome() }
+  show(layout)
+ }
+ override fun onBackPressed() { showHome() }
 }
