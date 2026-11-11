@@ -186,7 +186,7 @@ class MainActivity : Activity() {
          isRetained = true
         })
       }
-      discovery("steps", "Steps", "steps", null, "total_increasing")
+      discovery("steps", "Steps", "steps", null, "measurement")
       discovery("heart_rate", "Heart Rate", "bpm", null, "measurement")
       discovery("spo2", "SpO2", "%", null, "measurement")
       discovery("last_update", "Last Update", null, "timestamp", null)
