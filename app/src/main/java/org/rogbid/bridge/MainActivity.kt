@@ -147,6 +147,40 @@ class MainActivity : Activity() {
        }
       }
      }
+     // Read the latest sleep record from the vendor ContentProvider.
+     // Keep raw timestamps and phase details until their formats are confirmed.
+     var sleepError: String? = null
+     try {
+      contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
+       null, null, null, "_id DESC")?.use { cursor ->
+       if (cursor.moveToFirst()) {
+        fun raw(name: String): String? {
+         val index = cursor.getColumnIndex(name)
+         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else null
+        }
+        fun minutes(prefix: String): Int? {
+         val hh = raw(prefix + "HH")?.toIntOrNull()
+         val mm = raw(prefix + "MM")?.toIntOrNull()
+         return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
+        }
+        val sleep = JSONObject()
+        for (name in arrayOf("_id", "sleeptime", "wakeuptime", "dataList", "code",
+         "sumHH", "sumMM", "fastHH", "fastMM", "lightHH", "lightMM", "deepHH", "deepMM")) {
+         raw(name)?.let { sleep.put(name, it) }
+        }
+        data.put("sleep_raw", sleep)
+        minutes("sum")?.let { data.put("sleep_duration", it) }
+        minutes("deep")?.let { data.put("sleep_deep", it) }
+        minutes("light")?.let { data.put("sleep_light", it) }
+        minutes("fast")?.let { data.put("sleep_fast", it) }
+        raw("sleeptime")?.let { data.put("sleep_start", it) }
+        raw("wakeuptime")?.let { data.put("sleep_end", it) }
+       }
+      } ?: run { sleepError = "Sleep provider returned null" }
+     } catch (e: Exception) {
+      sleepError = e.javaClass.simpleName + ": " + e.message
+     }
+     sleepError?.let { data.put("sleep_error", it) }
      val scheme = if (number == 8883) "ssl" else "tcp"
      val client = MqttClient(scheme + "://" + hostname + ":" + number,
       "rogbid-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
@@ -190,6 +224,12 @@ class MainActivity : Activity() {
       discovery("heart_rate", "Heart Rate", "bpm", null, "measurement")
       discovery("spo2", "SpO2", "%", null, "measurement")
       discovery("last_update", "Last Update", null, "timestamp", null)
+      discovery("sleep_duration", "Sleep Duration", "min", "duration", "measurement")
+      discovery("sleep_deep", "Deep Sleep", "min", "duration", "measurement")
+      discovery("sleep_light", "Light Sleep", "min", "duration", "measurement")
+      discovery("sleep_fast", "Fast Sleep", "min", "duration", "measurement")
+      discovery("sleep_start", "Sleep Start", null, null, null)
+      discovery("sleep_end", "Wake Up", null, null, null)
       client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
        qos = 1
        isRetained = true
