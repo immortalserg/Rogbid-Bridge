@@ -1,5 +1,17 @@
 package org.rogbid.bridge
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.View
+import android.widget.LinearLayout
 import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
@@ -11,12 +23,89 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
 
 class MainActivity : Activity() {
+ private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
+ private val handler = Handler(Looper.getMainLooper())
+ private var activeListener: SensorEventListener? = null
+ private var activeSensor: Sensor? = null
+ private var measureStatus: TextView? = null
+ private var measureHeartButton: Button? = null
+ private var measureOxygenButton: Button? = null
+ private var measurementGeneration = 0
+ private var pendingSensorType = 0
+ private fun stopMeasurement() {
+  measurementGeneration++
+  activeListener?.let { sensorManager.unregisterListener(it) }
+  activeListener = null
+  activeSensor = null
+  measureHeartButton?.isEnabled = true
+  measureOxygenButton?.isEnabled = true
+ }
+ private fun beginMeasurement(type: Int) {
+  stopMeasurement()
+  if (android.os.Build.VERSION.SDK_INT >= 23 &&
+   checkSelfPermission(Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
+   pendingSensorType = type
+   requestPermissions(arrayOf(Manifest.permission.BODY_SENSORS), 1201)
+   return
+  }
+  val sensor = sensorManager.getDefaultSensor(type)
+  if (sensor == null) {
+   measureStatus?.text = "Sensor type $type is unavailable"
+   return
+  }
+  val generation = measurementGeneration
+  measureHeartButton?.isEnabled = false
+  measureOxygenButton?.isEnabled = false
+  measureStatus?.text = if (type == 21) "Measuring heart rate..." else "Measuring oxygen..."
+  val listener = object : SensorEventListener {
+   override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+   override fun onSensorChanged(event: SensorEvent) {
+    if (generation != measurementGeneration || event.values.isEmpty()) return
+    val heart = event.values[0].toInt()
+    val oxygen = if (type == 31 && event.values.size > 1) event.values[1].toInt() else 0
+    measureStatus?.text = if (type == 21) {
+     if (heart in 1..250) "Heart rate: $heart bpm (live, not saved)"
+     else "Waiting for valid heart rate..."
+    } else {
+     if (oxygen in 1..100) "SpO2: $oxygen% | Heart: $heart bpm (live, not saved)"
+     else "Waiting for valid SpO2... (heart: $heart)"
+    }
+   }
+  }
+  activeListener = listener
+  activeSensor = sensor
+  try {
+   if (!sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
+    stopMeasurement()
+    measureStatus?.text = "Unable to register sensor $type"
+    return
+   }
+  } catch (e: SecurityException) {
+   stopMeasurement()
+   measureStatus?.text = "Sensor permission denied: ${e.message}"
+   return
+  }
+  handler.postDelayed({
+   if (generation == measurementGeneration) {
+    stopMeasurement()
+    measureStatus?.append("\nMeasurement stopped after 45 seconds")
+   }
+  }, 45000)
+ }
+ override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+  super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+  if (requestCode == 1201) {
+   if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+    beginMeasurement(pendingSensorType)
+   } else measureStatus?.text = "Body sensors permission is required"
+  }
+ }
  private val prefs by lazy { getSharedPreferences("mqtt", MODE_PRIVATE) }
  private fun page(): LinearLayout = LinearLayout(this).apply {
   orientation = LinearLayout.VERTICAL
   setPadding(24, 24, 24, 24)
  }
- private fun show(view: LinearLayout) {
+ private fun show(view: LinearLayout) {\n  stopMeasurement()
   setContentView(ScrollView(this).apply { addView(view) })
  }
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,6 +118,20 @@ class MainActivity : Activity() {
  private fun showHome() {
   val layout = page()
   layout.addView(TextView(this).apply { text = "Rogbid Bridge"; textSize = 24f })
+  val measurementRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  val heartButton = Button(this).apply { text = "♥\\nHeart rate"; gravity = Gravity.CENTER }
+  val oxygenButton = Button(this).apply { text = "O₂\\nOxygen"; gravity = Gravity.CENTER }
+  val side = (resources.displayMetrics.widthPixels - 72) / 2
+  measurementRow.addView(heartButton, LinearLayout.LayoutParams(side, side))
+  measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(side, side).apply { leftMargin = 8 })
+  layout.addView(measurementRow)
+  val sensorStatus = TextView(this).apply { textSize = 15f; text = "Tap a square to start a 45-second live sensor test." }
+  layout.addView(sensorStatus)
+  measureStatus = sensorStatus
+  measureHeartButton = heartButton
+  measureOxygenButton = oxygenButton
+  heartButton.setOnClickListener { beginMeasurement(21) }
+  oxygenButton.setOnClickListener { beginMeasurement(31) }
   val button = Button(this).apply { text = "Send data to MQTT" }
   val history = Button(this).apply { text = "Send history to MQTT" }
   val settings = Button(this).apply { text = "Settings" }
@@ -285,5 +388,5 @@ class MainActivity : Activity() {
   back.setOnClickListener { showHome() }
   show(layout)
  }
- override fun onBackPressed() { showHome() }
+ override fun onBackPressed() { showHome() }\n override fun onDestroy() { stopMeasurement(); super.onDestroy() }
 }
