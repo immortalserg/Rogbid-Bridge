@@ -387,5 +387,6 @@ class MainActivity : Activity() {
   back.setOnClickListener { showHome() }
   show(layout)
  }
- override fun onBackPressed() { showHome() }\n override fun onDestroy() { stopMeasurement(); super.onDestroy() }
+ override fun onBackPressed() { showHome() }
+ override fun onDestroy() { stopMeasurement(); super.onDestroy() }
 }
