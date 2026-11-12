@@ -10,6 +10,9 @@ import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
 import android.net.Uri
 import android.os.Bundle
@@ -25,6 +28,8 @@ class MainActivity : Activity() {
  private val handler = Handler(Looper.getMainLooper())
  private var activeListener: SensorEventListener? = null
  private var measureStatus: TextView? = null
+ private var measureSymbol: TextView? = null
+ private var measureUnit: TextView? = null
  private var measureHeartButton: Button? = null
  private var measureOxygenButton: Button? = null
  private var measureStopButton: Button? = null
@@ -37,6 +42,29 @@ class MainActivity : Activity() {
    }
    override fun onUpgrade(db: android.database.sqlite.SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
   }
+ }
+ private data class Skin(val background: Int, val foreground: Int, val accent: Int, val button: Int)
+ private fun currentSkin(): Skin = when (prefs.getString("skin", "dark")) {
+  "light" -> Skin(Color.rgb(246, 248, 251), Color.rgb(25, 36, 50), Color.rgb(23, 119, 192), Color.rgb(225, 235, 244))
+  "forest" -> Skin(Color.rgb(13, 40, 34), Color.WHITE, Color.rgb(116, 225, 171), Color.rgb(28, 75, 63))
+  "sunset" -> Skin(Color.rgb(49, 24, 44), Color.WHITE, Color.rgb(255, 170, 108), Color.rgb(103, 49, 76))
+  else -> Skin(Color.rgb(17, 21, 31), Color.WHITE, Color.rgb(105, 187, 255), Color.rgb(42, 51, 69))
+ }
+ private fun styleButton(button: Button, skin: Skin) {
+  button.setTextColor(skin.foreground)
+  button.isAllCaps = false
+  button.background = GradientDrawable().apply {
+   setColor(skin.button)
+   cornerRadius = 18f * resources.displayMetrics.density
+  }
+ }
+ private fun showReading(type: Int, value: String) {
+  measureSymbol?.text = if (type == 21) "♥" else "O₂"
+  measureUnit?.text = if (type == 21) "bpm" else "%"
+  measureStatus?.text = value
+ }
+ private fun notifyMessage(message: String) {
+  Toast.makeText(this, message, Toast.LENGTH_LONG).show()
  }
  private fun stopMeasurement() {
   measurementGeneration++
@@ -98,7 +126,7 @@ class MainActivity : Activity() {
  private fun completeMeasurement(type: Int, heart: Int, oxygen: Int) {
   stopMeasurement()
   val time = java.time.Instant.now().toString()
-  measureStatus?.text = "Measurement complete. Saving..."
+  showReading(type, if (type == 21) heart.toString() else oxygen.toString())
   Thread {
    var saved = false
    try {
@@ -110,11 +138,11 @@ class MainActivity : Activity() {
     }
     measurementDb.writableDatabase.insertOrThrow("measurements", null, values)
     saved = true
-    runOnUiThread { measureStatus?.text = "Saved at $time. Publishing MQTT..." }
+
     publishMeasurement(type, heart, oxygen, time)
-    runOnUiThread { measureStatus?.text = "Saved and published: " + (if (type == 21) "$heart bpm" else "$oxygen% SpO2, $heart bpm") }
+
    } catch (e: Exception) {
-    runOnUiThread { measureStatus?.text = (if (saved) "Saved locally, MQTT failed: " else "Save failed: ") + e.message }
+    runOnUiThread { notifyMessage((if (saved) "MQTT error: " else "Save error: ") + e.message) }
    }
   }.start()
  }
@@ -128,7 +156,7 @@ class MainActivity : Activity() {
   }
   val sensor = sensorManager.getDefaultSensor(type)
   if (sensor == null) {
-   measureStatus?.text = "Sensor type $type is unavailable"
+   notifyMessage("Sensor type $type is unavailable")
    return
   }
   val generation = measurementGeneration
@@ -137,7 +165,7 @@ class MainActivity : Activity() {
   measureHeartButton?.isEnabled = false
   measureOxygenButton?.isEnabled = false
   measureStopButton?.isEnabled = true
-  measureStatus?.text = if (type == 21) "Measuring heart rate..." else "Measuring oxygen..."
+  showReading(type, "…")
   val listener = object : SensorEventListener {
    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
    override fun onSensorChanged(event: SensorEvent) {
@@ -146,7 +174,7 @@ class MainActivity : Activity() {
     val oxygen = if (type == 31 && event.values.size > 1) event.values[1].toInt() else 0
     if (heart !in 35..220 || (type == 31 && oxygen !in 70..100)) {
      recent.clear()
-     measureStatus?.text = "Waiting for valid sensor values..."
+     showReading(type, "…")
      return
     }
     recent.addLast(Pair(heart, oxygen))
@@ -159,8 +187,7 @@ class MainActivity : Activity() {
      completeMeasurement(type, values.map { it.first }.average().toInt(),
       if (type == 31) values.map { it.second }.average().toInt() else 0)
     } else {
-     measureStatus?.text = if (type == 21) "Heart rate: $heart bpm (stabilizing...)"
-      else "SpO2: $oxygen% | Heart: $heart bpm (stabilizing...)"
+     showReading(type, if (type == 21) heart.toString() else oxygen.toString())
     }
    }
   }
@@ -168,18 +195,18 @@ class MainActivity : Activity() {
   try {
    if (!sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
     stopMeasurement()
-    measureStatus?.text = "Unable to register sensor $type"
+    notifyMessage("Unable to register sensor $type")
     return
    }
   } catch (e: SecurityException) {
    stopMeasurement()
-   measureStatus?.text = "Sensor permission denied: " + e.message
+   notifyMessage("Sensor permission denied: " + e.message)
    return
   }
   handler.postDelayed({
    if (generation == measurementGeneration) {
     stopMeasurement()
-    measureStatus?.text = "Timed out after 45 seconds; no stable result saved"
+    notifyMessage("Measurement timed out")
    }
   }, 45000)
  }
@@ -188,54 +215,81 @@ class MainActivity : Activity() {
   if (requestCode == 1201) {
    if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
     beginMeasurement(pendingSensorType)
-   } else measureStatus?.text = "Body sensors permission is required"
+   } else notifyMessage("Body sensors permission is required")
   }
  }
  private val prefs by lazy { getSharedPreferences("mqtt", MODE_PRIVATE) }
  private fun page(): LinearLayout = LinearLayout(this).apply {
   orientation = LinearLayout.VERTICAL
-  setPadding(24, 24, 24, 24)
+  setPadding(16, 16, 16, 16)
+  setBackgroundColor(currentSkin().background)
  }
  private fun show(view: LinearLayout) {
   stopMeasurement()
-  setContentView(ScrollView(this).apply { addView(view) })
+  setContentView(ScrollView(this).apply {
+   setBackgroundColor(currentSkin().background)
+   addView(view)
+  })
  }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-  // Retire the experimental background worker on upgrade.
   stopService(android.content.Intent(this, SyncService::class.java))
   prefs.edit().putBoolean("auto", false).apply()
   showHome()
  }
  private fun showHome() {
+  val skin = currentSkin()
   val layout = page()
-  layout.addView(TextView(this).apply { text = "Rogbid Bridge"; textSize = 24f })
+  val density = resources.displayMetrics.density
   val measurementRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val heartButton = Button(this).apply { text = "♥\nHeart rate"; gravity = Gravity.CENTER }
-  val oxygenButton = Button(this).apply { text = "O₂\nOxygen"; gravity = Gravity.CENTER }
-  val side = (resources.displayMetrics.widthPixels - 72) / 2
-  measurementRow.addView(heartButton, LinearLayout.LayoutParams(side, side))
-  measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(side, side).apply { leftMargin = 8 })
+  val heartButton = Button(this).apply { text = "♥"; textSize = 34f; gravity = Gravity.CENTER }
+  val oxygenButton = Button(this).apply { text = "O₂"; textSize = 32f; gravity = Gravity.CENTER }
+  styleButton(heartButton, skin)
+  styleButton(oxygenButton, skin)
+  val side = ((resources.displayMetrics.widthPixels - 40 * density) / 2).toInt()
+  measurementRow.addView(heartButton, LinearLayout.LayoutParams(0, side, 1f).apply { rightMargin = (4 * density).toInt() })
+  measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(0, side, 1f).apply { leftMargin = (4 * density).toInt() })
   layout.addView(measurementRow)
-  val sensorStatus = TextView(this).apply { textSize = 15f; text = "Stable results are saved and published automatically." }
+  val symbol = TextView(this).apply {
+   text = "♥"; textSize = 42f; gravity = Gravity.CENTER
+   setTextColor(skin.accent)
+  }
+  val sensorStatus = TextView(this).apply {
+   text = "—"; textSize = 68f; gravity = Gravity.CENTER
+   typeface = Typeface.DEFAULT_BOLD
+   setTextColor(skin.foreground)
+  }
+  val unit = TextView(this).apply {
+   text = "bpm"; textSize = 24f; gravity = Gravity.CENTER
+   setTextColor(skin.accent)
+  }
+  layout.addView(symbol)
   layout.addView(sensorStatus)
+  layout.addView(unit)
+  measureSymbol = symbol
   measureStatus = sensorStatus
+  measureUnit = unit
   measureHeartButton = heartButton
   measureOxygenButton = oxygenButton
-  val stopButton = Button(this).apply { text = "Stop measurement"; isEnabled = false }
+  val stopButton = Button(this).apply { text = "Stop"; isEnabled = false }
+  styleButton(stopButton, skin)
   layout.addView(stopButton)
   measureStopButton = stopButton
-  stopButton.setOnClickListener { stopMeasurement(); sensorStatus.text = "Measurement cancelled" }
+  stopButton.setOnClickListener { stopMeasurement(); sensorStatus.text = "—" }
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
-  val button = Button(this).apply { text = "Send data to MQTT" }
-  val history = Button(this).apply { text = "Send history to MQTT" }
+  val button = Button(this).apply { text = "Send data" }
+  val history = Button(this).apply { text = "Send history" }
   val settings = Button(this).apply { text = "Settings" }
-  val status = TextView(this).apply { textSize = 15f }
-  layout.addView(button)
-  layout.addView(history)
-  layout.addView(settings)
-  layout.addView(status)
+  val status = TextView(this)
+  val lower = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  val lower2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  for (control in arrayOf(button, history, settings)) styleButton(control, skin)
+  lower.addView(button, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { rightMargin = (4 * density).toInt() })
+  lower.addView(history, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { leftMargin = (4 * density).toInt() })
+  lower2.addView(settings, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f))
+  layout.addView(lower)
+  layout.addView(lower2)
   show(layout)
   settings.setOnClickListener { showSettings() }
   history.setOnClickListener {
@@ -244,12 +298,12 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Open Settings and configure MQTT connection"
+    notifyMessage("Configure MQTT in Settings")
     return@setOnClickListener
    }
    history.isEnabled = false
    button.isEnabled = false
-   status.text = "Reading step history..."
+   
    Thread {
     try {
      val records = linkedMapOf<String, JSONObject>()
@@ -296,13 +350,13 @@ class MainActivity : Activity() {
         })
        published++
       }
-      runOnUiThread { status.text = "History published: " + published + " day(s)" }
+      runOnUiThread { notifyMessage("History published: " + published + " day(s)") }
      } finally {
       if (client.isConnected) client.disconnect()
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { status.text = "History error: " + e.javaClass.simpleName + ": " + e.message }
+     runOnUiThread { notifyMessage("History error: " + e.message) }
     } finally {
      runOnUiThread {
       history.isEnabled = true
@@ -317,13 +371,13 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Open Settings and configure MQTT connection"
+    notifyMessage("Configure MQTT in Settings")
     return@setOnClickListener
    }
    val login = prefs.getString("user", "").orEmpty()
    val password = prefs.getString("password", "").orEmpty()
    button.isEnabled = false
-   status.text = "Connecting..."
+   
    Thread {
     try {
      val data = JSONObject()
@@ -438,7 +492,7 @@ class MainActivity : Activity() {
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { status.text = "MQTT error: " + e.javaClass.simpleName + ": " + e.message }
+     runOnUiThread { notifyMessage("MQTT error: " + e.message) }
     } finally {
      runOnUiThread { button.isEnabled = true }
     }
@@ -447,7 +501,7 @@ class MainActivity : Activity() {
  }
  private fun showSettings() {
   val layout = page()
-  layout.addView(TextView(this).apply { text = "MQTT Settings"; textSize = 22f })
+  layout.addView(TextView(this).apply { text = "Settings"; textSize = 22f; setTextColor(currentSkin().foreground) })
   fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText =
    EditText(this).apply {
     hint = label
@@ -461,6 +515,15 @@ class MainActivity : Activity() {
   val user = field("Username", prefs.getString("user", "").orEmpty())
   val pass = field("Password (visible during testing)", prefs.getString("password", "").orEmpty())
   val device = field("Device ID", prefs.getString("device", "king").orEmpty())
+  val skinNames = arrayOf("Dark", "Light", "Forest", "Sunset")
+  val skinKeys = arrayOf("dark", "light", "forest", "sunset")
+  layout.addView(TextView(this).apply {
+   text = "Appearance"; textSize = 18f; setTextColor(currentSkin().foreground)
+  })
+  val skinChoice = Spinner(this)
+  skinChoice.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, skinNames)
+  skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
+  layout.addView(skinChoice)
   val save = Button(this).apply { text = "Save settings" }
   val back = Button(this).apply { text = "Back" }
   val status = TextView(this)
@@ -476,7 +539,8 @@ class MainActivity : Activity() {
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", p.toString()).putString("user", user.text.toString())
-     .putString("password", pass.text.toString()).putString("device", d).apply()
+     .putString("password", pass.text.toString()).putString("device", d)
+      .putString("skin", skinKeys[skinChoice.selectedItemPosition]).apply()
     showHome()
    }
   }
