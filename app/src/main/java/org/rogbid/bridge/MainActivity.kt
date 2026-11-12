@@ -30,6 +30,7 @@ class MainActivity : Activity() {
  private var measureStatus: TextView? = null
  private var measureSymbol: TextView? = null
  private var measureUnit: TextView? = null
+ private var measureAnimation: TextView? = null
  private var measureHeartButton: Button? = null
  private var measureOxygenButton: Button? = null
  private var measureStopButton: Button? = null
@@ -73,6 +74,7 @@ class MainActivity : Activity() {
   measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = true
   measureStopButton?.isEnabled = false
+  measureAnimation?.text = ""
  }
  private fun publishMeasurement(type: Int, heart: Int, oxygen: Int, time: String) {
   val host = prefs.getString("host", "")?.trim().orEmpty()
@@ -146,6 +148,12 @@ class MainActivity : Activity() {
    }
   }.start()
  }
+ private fun animateMeasurement(generation: Int, frame: Int = 0) {
+  if (generation != measurementGeneration) return
+  val frames = arrayOf("● ○ ○", "○ ● ○", "○ ○ ●", "○ ● ○")
+  measureAnimation?.text = frames[frame % frames.size]
+  handler.postDelayed({ animateMeasurement(generation, frame + 1) }, 350)
+ }
  private fun beginMeasurement(type: Int) {
   stopMeasurement()
   if (android.os.Build.VERSION.SDK_INT >= 23 &&
@@ -166,6 +174,7 @@ class MainActivity : Activity() {
   measureOxygenButton?.isEnabled = false
   measureStopButton?.isEnabled = true
   showReading(type, "…")
+  animateMeasurement(generation)
   val listener = object : SensorEventListener {
    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
    override fun onSensorChanged(event: SensorEvent) {
@@ -246,26 +255,46 @@ class MainActivity : Activity() {
   val oxygenButton = Button(this).apply { text = "O₂"; textSize = 32f; gravity = Gravity.CENTER }
   styleButton(heartButton, skin)
   styleButton(oxygenButton, skin)
-  val side = ((resources.displayMetrics.widthPixels - 40 * density) / 2).toInt()
+  val side = ((resources.displayMetrics.widthPixels - 40 * density) / 4).toInt()
   measurementRow.addView(heartButton, LinearLayout.LayoutParams(0, side, 1f).apply { rightMargin = (4 * density).toInt() })
   measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(0, side, 1f).apply { leftMargin = (4 * density).toInt() })
   layout.addView(measurementRow)
+  val readingRow = LinearLayout(this).apply {
+   orientation = LinearLayout.HORIZONTAL
+   gravity = Gravity.CENTER
+   minimumHeight = (92 * density).toInt()
+  }
   val symbol = TextView(this).apply {
-   text = "♥"; textSize = 42f; gravity = Gravity.CENTER
+   text = "♥"; textSize = 30f; gravity = Gravity.CENTER
    setTextColor(skin.accent)
+   setSingleLine(true)
   }
   val sensorStatus = TextView(this).apply {
-   text = "—"; textSize = 68f; gravity = Gravity.CENTER
+   text = "—"; textSize = 52f; gravity = Gravity.CENTER
    typeface = Typeface.DEFAULT_BOLD
    setTextColor(skin.foreground)
+   setSingleLine(true)
   }
   val unit = TextView(this).apply {
-   text = "bpm"; textSize = 24f; gravity = Gravity.CENTER
+   text = "bpm"; textSize = 20f; gravity = Gravity.CENTER
    setTextColor(skin.accent)
+   setSingleLine(true)
   }
-  layout.addView(symbol)
-  layout.addView(sensorStatus)
-  layout.addView(unit)
+  readingRow.addView(symbol, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+   rightMargin = (10 * density).toInt()
+  })
+  readingRow.addView(sensorStatus)
+  readingRow.addView(unit, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+   leftMargin = (7 * density).toInt()
+  })
+  layout.addView(readingRow)
+  val animation = TextView(this).apply {
+   text = ""; textSize = 16f; gravity = Gravity.CENTER
+   setTextColor(skin.accent)
+   minimumHeight = (24 * density).toInt()
+  }
+  layout.addView(animation)
+  measureAnimation = animation
   measureSymbol = symbol
   measureStatus = sensorStatus
   measureUnit = unit
