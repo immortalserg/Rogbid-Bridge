@@ -27,17 +27,19 @@ class MainActivity : Activity() {
  private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
  private val handler = Handler(Looper.getMainLooper())
  private var activeListener: SensorEventListener? = null
- private var measureStatus: TextView? = null
- private var measureSymbol: TextView? = null
- private var measureUnit: TextView? = null
- private var measureAnimation: TextView? = null
+ private var pulseLabel: TextView? = null
+ private var oxygenLabel: TextView? = null
+ private var pulseValue: TextView? = null
+ private var oxygenValue: TextView? = null
+ private var measurementValid = false
+ private var lastPulse = "—"
+ private var lastOxygen = "—"
  private var measureHeartButton: Button? = null
  private var measureOxygenButton: Button? = null
  private var activeMeasurementType = 0
  private var lastReadingType = 21
  private var lastReadingValue = "—"
- private var latestHeart: TextView? = null
- private var latestOxygen: TextView? = null
+
  private var latestSteps: TextView? = null
  private var latestSleep: TextView? = null
  private var measurementGeneration = 0
@@ -66,11 +68,12 @@ class MainActivity : Activity() {
   }
  }
  private fun showReading(type: Int, value: String) {
-  measureSymbol?.text = if (type == 21) "♥" else "O₂"
-  measureUnit?.text = if (type == 21) "bpm" else "%"
-  measureStatus?.text = value
-  lastReadingType = type
-  if (value != "…" && value != "—") lastReadingValue = value
+  val target = if (type == 21) pulseValue else oxygenValue
+  target?.text = value
+  target?.setTextColor(if (activeMeasurementType == type && measurementValid) Color.rgb(63, 210, 110) else currentSkin().foreground)
+ }
+ private fun restoreReading(type: Int) {
+  showReading(type, if (type == 21) lastPulse else lastOxygen)
  }
  private fun notifyMessage(message: String) {
   Toast.makeText(this, message, Toast.LENGTH_LONG).show()
@@ -82,7 +85,10 @@ class MainActivity : Activity() {
   measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = true
   activeMeasurementType = 0
-  measureAnimation?.text = ""
+  pulseLabel?.alpha = 1f
+  oxygenLabel?.alpha = 1f
+  pulseValue?.setTextColor(currentSkin().foreground)
+  oxygenValue?.setTextColor(currentSkin().foreground)
  }
  private fun refreshLatest() {
   Thread {
@@ -129,8 +135,10 @@ class MainActivity : Activity() {
     }
    } catch (_: Exception) {}
    runOnUiThread {
-    latestHeart?.text = heart
-    latestOxygen?.text = oxygen
+    lastPulse = heart
+    lastOxygen = oxygen
+    if (activeMeasurementType != 21) pulseValue?.text = heart
+    if (activeMeasurementType != 31) oxygenValue?.text = oxygen
     latestSteps?.text = steps
     latestSleep?.text = sleep
    }
@@ -188,7 +196,10 @@ class MainActivity : Activity() {
  private fun completeMeasurement(type: Int, heart: Int, oxygen: Int) {
   stopMeasurement()
   val time = java.time.Instant.now().toString()
-  showReading(type, if (type == 21) heart.toString() else oxygen.toString())
+  if (type == 21) lastPulse = "$heart bpm" else lastOxygen = "$oxygen %"
+  showReading(type, if (type == 21) lastPulse else lastOxygen)
+  pulseValue?.setTextColor(currentSkin().foreground)
+  oxygenValue?.setTextColor(currentSkin().foreground)
   Thread {
    var saved = false
    try {
@@ -211,14 +222,14 @@ class MainActivity : Activity() {
  }
  private fun animateMeasurement(generation: Int, frame: Int = 0) {
   if (generation != measurementGeneration) return
-  val frames = arrayOf("● ○ ○", "○ ● ○", "○ ○ ●", "○ ● ○")
-  measureAnimation?.text = frames[frame % frames.size]
-  handler.postDelayed({ animateMeasurement(generation, frame + 1) }, 350)
+  val label = if (activeMeasurementType == 21) pulseLabel else oxygenLabel
+  label?.alpha = if (frame % 2 == 0) 1f else 0.25f
+  handler.postDelayed({ animateMeasurement(generation, frame + 1) }, 450)
  }
  private fun beginMeasurement(type: Int) {
   if (activeMeasurementType == type) {
    stopMeasurement()
-   showReading(lastReadingType, lastReadingValue)
+   restoreReading(type)
    return
   }
   stopMeasurement()
@@ -237,13 +248,14 @@ class MainActivity : Activity() {
   val startedAt = android.os.SystemClock.elapsedRealtime()
   val recent = java.util.ArrayDeque<Pair<Int, Int>>()
   activeMeasurementType = type
+  measurementValid = false
   measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = false
   if (type == 31) {
    measureHeartButton?.isEnabled = false
    measureOxygenButton?.isEnabled = true
   }
-  showReading(type, "…")
+  showReading(type, if (type == 21) lastPulse else lastOxygen)
   animateMeasurement(generation)
   val listener = object : SensorEventListener {
    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -253,7 +265,7 @@ class MainActivity : Activity() {
     val oxygen = if (type == 31 && event.values.size > 1) event.values[1].toInt() else 0
     if (heart !in 35..220 || (type == 31 && oxygen !in 70..100)) {
      recent.clear()
-     showReading(type, "…")
+     if (!measurementValid) restoreReading(type)
      return
     }
     recent.addLast(Pair(heart, oxygen))
@@ -266,7 +278,7 @@ class MainActivity : Activity() {
      completeMeasurement(type, values.map { it.first }.average().toInt(),
       if (type == 31) values.map { it.second }.average().toInt() else 0)
     } else {
-     showReading(type, if (type == 21) heart.toString() else oxygen.toString())
+     showReading(type, if (type == 21) "$heart bpm" else "$oxygen %")
     }
    }
   }
@@ -329,87 +341,57 @@ class MainActivity : Activity() {
   measurementRow.addView(heartButton, LinearLayout.LayoutParams(0, side, 1f).apply { rightMargin = (4 * density).toInt() })
   measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(0, side, 1f).apply { leftMargin = (4 * density).toInt() })
   layout.addView(measurementRow)
-  val readingRow = LinearLayout(this).apply {
-   orientation = LinearLayout.HORIZONTAL
-   gravity = Gravity.CENTER
-   minimumHeight = (92 * density).toInt()
-  }
-  val symbol = TextView(this).apply {
-   text = "♥"; textSize = 30f; gravity = Gravity.CENTER
-   setTextColor(skin.accent)
-   setSingleLine(true)
-  }
-  val sensorStatus = TextView(this).apply {
-   text = "—"; textSize = 52f; gravity = Gravity.CENTER
-   typeface = Typeface.DEFAULT_BOLD
-   setTextColor(skin.foreground)
-   setSingleLine(true)
-  }
-  val unit = TextView(this).apply {
-   text = "bpm"; textSize = 20f; gravity = Gravity.CENTER
-   setTextColor(skin.accent)
-   setSingleLine(true)
-  }
-  readingRow.addView(symbol, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-   rightMargin = (10 * density).toInt()
-  })
-  readingRow.addView(sensorStatus)
-  readingRow.addView(unit, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-   leftMargin = (7 * density).toInt()
-  })
-  layout.addView(readingRow)
-  val animation = TextView(this).apply {
-   text = ""; textSize = 16f; gravity = Gravity.CENTER
-   setTextColor(skin.accent)
-   minimumHeight = (24 * density).toInt()
-  }
-  layout.addView(animation)
-  measureAnimation = animation
-  measureSymbol = symbol
-  measureStatus = sensorStatus
-  measureUnit = unit
-  measureHeartButton = heartButton
-  measureOxygenButton = oxygenButton
-  fun statCell(icon: String, label: String, value: String): Pair<LinearLayout, TextView> {
+  fun tile(icon: String, label: String): Pair<LinearLayout, Pair<TextView, TextView>> {
    val cell = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     gravity = Gravity.CENTER
-    setPadding((4 * density).toInt(), (7 * density).toInt(), (4 * density).toInt(), (7 * density).toInt())
-   }
-   val line = TextView(this).apply {
-    text = icon + "  " + value
-    textSize = 17f
-    gravity = Gravity.CENTER
-    setTextColor(skin.foreground)
-    setSingleLine(true)
+    setPadding((4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt())
+    background = GradientDrawable().apply {
+     setColor(skin.button)
+     cornerRadius = 16 * density
+    }
    }
    val caption = TextView(this).apply {
-    text = label
-    textSize = 13f
-    gravity = Gravity.CENTER
+    text = "$icon  $label"; textSize = 17f; gravity = Gravity.CENTER
     setTextColor(skin.accent)
     setSingleLine(true)
    }
-   cell.addView(line)
+   val value = TextView(this).apply {
+    text = "—"; textSize = 28f; gravity = Gravity.CENTER
+    typeface = Typeface.DEFAULT_BOLD
+    setTextColor(skin.foreground)
+    setSingleLine(true)
+   }
    cell.addView(caption)
-   return Pair(cell, line)
+   cell.addView(value)
+   return Pair(cell, Pair(caption, value))
   }
   val summaryRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val summaryRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val heartCell = statCell("♥", "Pulse", "—")
-  val oxygenCell = statCell("O₂", "Oxygen", "—")
-  val stepsCell = statCell("♟", "Steps", "—")
-  val sleepCell = statCell("☾", "Sleep", "—")
+  val heartCell = tile("♥", "Pulse")
+  val oxygenCell = tile("O₂", "Oxygen")
+  val stepsCell = tile("♟", "Steps")
+  val sleepCell = tile("☾", "Sleep")
   for ((row, pair) in listOf(
    Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
    Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
-  )) row.addView(pair.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (100 * density).toInt(), 1f).apply {
+   setMargins((3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt())
+  })
   layout.addView(summaryRow1)
   layout.addView(summaryRow2)
-  latestHeart = heartCell.second
-  latestOxygen = oxygenCell.second
-  latestSteps = stepsCell.second
-  latestSleep = sleepCell.second
+  pulseLabel = heartCell.second.first
+  oxygenLabel = oxygenCell.second.first
+  pulseValue = heartCell.second.second
+  oxygenValue = oxygenCell.second.second
+  latestSteps = stepsCell.second.second
+  latestSleep = sleepCell.second.second
+  heartCell.first.setOnClickListener { showJournal("heart") }
+  oxygenCell.first.setOnClickListener { showJournal("oxygen") }
+  stepsCell.first.setOnClickListener { showJournal("steps") }
+  sleepCell.first.setOnClickListener { showJournal("sleep") }
+  measureHeartButton = heartButton
+  measureOxygenButton = oxygenButton
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
   val button = Button(this).apply { text = "Send data" }
@@ -633,6 +615,78 @@ class MainActivity : Activity() {
     }
    }.start()
   }
+ }
+ private fun showJournal(kind: String) {
+  val skin = currentSkin()
+  val layout = page()
+  val title = when (kind) {
+   "heart" -> "♥ Pulse history"
+   "oxygen" -> "O₂ Oxygen history"
+   "steps" -> "♟ Steps history"
+   else -> "☾ Sleep history"
+  }
+  layout.addView(TextView(this).apply {
+   text = title; textSize = 22f; setTextColor(skin.foreground)
+  })
+  val entries = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+  layout.addView(entries)
+  val back = Button(this).apply { text = "Back" }
+  styleButton(back, skin)
+  layout.addView(back)
+  back.setOnClickListener { showHome() }
+  show(layout)
+  Thread {
+   val records = mutableListOf<String>()
+   try {
+    if (kind == "heart" || kind == "oxygen") {
+     val type = if (kind == "heart") 21 else 31
+     measurementDb.readableDatabase.rawQuery(
+      "SELECT measured_at, heart_rate, spo2 FROM measurements WHERE sensor_type = ? ORDER BY id DESC LIMIT 100",
+      arrayOf(type.toString())
+     ).use { cursor ->
+      while (cursor.moveToNext()) {
+       val time = cursor.getString(0).replace("T", " ").take(19)
+       val reading = if (type == 21) cursor.getInt(1).toString() + " bpm"
+        else cursor.getInt(2).toString() + " %"
+       records.add("$time    $reading")
+      }
+     }
+    } else if (kind == "steps") {
+     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+      arrayOf("date", "steps"), null, null, "date DESC")?.use { cursor ->
+      val date = cursor.getColumnIndex("date")
+      val steps = cursor.getColumnIndex("steps")
+      if (date >= 0 && steps >= 0) while (cursor.moveToNext() && records.size < 100) {
+       records.add(cursor.getString(date) + "    " + cursor.getLong(steps) + " steps")
+      }
+     }
+    } else {
+     contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
+      null, null, null, "_id DESC")?.use { cursor ->
+      fun value(name: String): String? {
+       val i = cursor.getColumnIndex(name)
+       return if (i >= 0 && !cursor.isNull(i)) cursor.getString(i) else null
+      }
+      while (cursor.moveToNext() && records.size < 100) {
+       val hh = value("sumHH")?.toIntOrNull()
+       val mm = value("sumMM")?.toIntOrNull()
+       val duration = if (hh != null && mm != null) "${hh}h ${mm}m" else "—"
+       records.add((value("sleeptime") ?: value("_id") ?: "Sleep") + "    " + duration)
+      }
+     }
+    }
+   } catch (e: Exception) {
+    records.add("History unavailable: " + e.message)
+   }
+   runOnUiThread {
+    if (records.isEmpty()) records.add("No history available")
+    for (record in records) entries.addView(TextView(this).apply {
+     text = record; textSize = 16f
+     setTextColor(skin.foreground)
+     setPadding(0, 10, 0, 10)
+    })
+   }
+  }.start()
  }
  private fun showSettings() {
   val layout = page()
