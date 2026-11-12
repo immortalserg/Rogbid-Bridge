@@ -24,19 +24,100 @@ class MainActivity : Activity() {
  private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
  private val handler = Handler(Looper.getMainLooper())
  private var activeListener: SensorEventListener? = null
- private var activeSensor: Sensor? = null
  private var measureStatus: TextView? = null
  private var measureHeartButton: Button? = null
  private var measureOxygenButton: Button? = null
+ private var measureStopButton: Button? = null
  private var measurementGeneration = 0
  private var pendingSensorType = 0
+ private val measurementDb by lazy {
+  object : android.database.sqlite.SQLiteOpenHelper(this, "measurements.db", null, 1) {
+   override fun onCreate(db: android.database.sqlite.SQLiteDatabase) {
+    db.execSQL("CREATE TABLE measurements (id INTEGER PRIMARY KEY AUTOINCREMENT, measured_at TEXT NOT NULL, sensor_type INTEGER NOT NULL, heart_rate INTEGER, spo2 INTEGER)")
+   }
+   override fun onUpgrade(db: android.database.sqlite.SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+  }
+ }
  private fun stopMeasurement() {
   measurementGeneration++
   activeListener?.let { sensorManager.unregisterListener(it) }
   activeListener = null
-  activeSensor = null
   measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = true
+  measureStopButton?.isEnabled = false
+ }
+ private fun publishMeasurement(type: Int, heart: Int, oxygen: Int, time: String) {
+  val host = prefs.getString("host", "")?.trim().orEmpty()
+  val port = prefs.getString("port", "1883")?.toIntOrNull()
+  val id = prefs.getString("device", "king")?.trim().orEmpty()
+  if (host.isEmpty() || port == null || port !in 1..65535 ||
+   !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("Configure MQTT in Settings")
+  val topic = "rogbid/$id/measurements"
+  val client = MqttClient((if (port == 8883) "ssl" else "tcp") + "://$host:$port",
+   "rogbid-measure-$id-" + System.currentTimeMillis(), MemoryPersistence())
+  try {
+   val options = MqttConnectOptions().apply {
+    isCleanSession = true
+    connectionTimeout = 10
+    prefs.getString("user", "")?.takeIf { it.isNotBlank() }?.let { userName = it }
+    prefs.getString("password", "")?.takeIf { it.isNotEmpty() }?.let { password = it.toCharArray() }
+   }
+   client.connect(options)
+   val device = JSONObject().apply {
+    put("identifiers", org.json.JSONArray().put("rogbid_$id"))
+    put("name", "Rogbid $id")
+    put("manufacturer", "Rogbid")
+    put("model", "Z10")
+   }
+   fun discovery(key: String, label: String, unit: String) {
+    val config = JSONObject().apply {
+     put("name", label)
+     put("unique_id", "rogbid_" + id + "_" + key)
+     put("state_topic", topic)
+     put("value_template", "{{ value_json." + key + " }}")
+     put("unit_of_measurement", unit)
+     put("state_class", "measurement")
+     put("device", device)
+    }
+    client.publish("homeassistant/sensor/rogbid_$id/$key/config",
+     MqttMessage(config.toString().toByteArray(Charsets.UTF_8)).apply { qos = 1; isRetained = true })
+   }
+   discovery("heart_rate", "Heart Rate", "bpm")
+   discovery("spo2", "SpO2", "%")
+   val data = JSONObject().put("measured_at", time).put("sensor_type", type)
+    .put("heart_rate", heart)
+   if (type == 31) data.put("spo2", oxygen)
+   client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
+    qos = 1
+    isRetained = true
+   })
+  } finally {
+   if (client.isConnected) client.disconnect()
+   client.close()
+  }
+ }
+ private fun completeMeasurement(type: Int, heart: Int, oxygen: Int) {
+  stopMeasurement()
+  val time = java.time.Instant.now().toString()
+  measureStatus?.text = "Measurement complete. Saving..."
+  Thread {
+   var saved = false
+   try {
+    val values = android.content.ContentValues().apply {
+     put("measured_at", time)
+     put("sensor_type", type)
+     put("heart_rate", heart)
+     if (type == 31) put("spo2", oxygen)
+    }
+    measurementDb.writableDatabase.insertOrThrow("measurements", null, values)
+    saved = true
+    runOnUiThread { measureStatus?.text = "Saved at $time. Publishing MQTT..." }
+    publishMeasurement(type, heart, oxygen, time)
+    runOnUiThread { measureStatus?.text = "Saved and published: " + (if (type == 21) "$heart bpm" else "$oxygen% SpO2, $heart bpm") }
+   } catch (e: Exception) {
+    runOnUiThread { measureStatus?.text = (if (saved) "Saved locally, MQTT failed: " else "Save failed: ") + e.message }
+   }
+  }.start()
  }
  private fun beginMeasurement(type: Int) {
   stopMeasurement()
@@ -52,8 +133,11 @@ class MainActivity : Activity() {
    return
   }
   val generation = measurementGeneration
+  val startedAt = android.os.SystemClock.elapsedRealtime()
+  val recent = java.util.ArrayDeque<Pair<Int, Int>>()
   measureHeartButton?.isEnabled = false
   measureOxygenButton?.isEnabled = false
+  measureStopButton?.isEnabled = true
   measureStatus?.text = if (type == 21) "Measuring heart rate..." else "Measuring oxygen..."
   val listener = object : SensorEventListener {
    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -61,17 +145,27 @@ class MainActivity : Activity() {
     if (generation != measurementGeneration || event.values.isEmpty()) return
     val heart = event.values[0].toInt()
     val oxygen = if (type == 31 && event.values.size > 1) event.values[1].toInt() else 0
-    measureStatus?.text = if (type == 21) {
-     if (heart in 1..250) "Heart rate: $heart bpm (live, not saved)"
-     else "Waiting for valid heart rate..."
+    if (heart !in 35..220 || (type == 31 && oxygen !in 70..100)) {
+     recent.clear()
+     measureStatus?.text = "Waiting for valid sensor values..."
+     return
+    }
+    recent.addLast(Pair(heart, oxygen))
+    if (recent.size > 3) recent.removeFirst()
+    val values = recent.toList()
+    val stable = values.size == 3 &&
+     values.maxOf { it.first } - values.minOf { it.first } <= 5 &&
+     (type == 21 || values.maxOf { it.second } - values.minOf { it.second } <= 2)
+    if (stable && android.os.SystemClock.elapsedRealtime() - startedAt >= 10000) {
+     completeMeasurement(type, values.map { it.first }.average().toInt(),
+      if (type == 31) values.map { it.second }.average().toInt() else 0)
     } else {
-     if (oxygen in 1..100) "SpO2: $oxygen% | Heart: $heart bpm (live, not saved)"
-     else "Waiting for valid SpO2... (heart: $heart)"
+     measureStatus?.text = if (type == 21) "Heart rate: $heart bpm (stabilizing...)"
+      else "SpO2: $oxygen% | Heart: $heart bpm (stabilizing...)"
     }
    }
   }
   activeListener = listener
-  activeSensor = sensor
   try {
    if (!sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
     stopMeasurement()
@@ -80,13 +174,13 @@ class MainActivity : Activity() {
    }
   } catch (e: SecurityException) {
    stopMeasurement()
-   measureStatus?.text = "Sensor permission denied: ${e.message}"
+   measureStatus?.text = "Sensor permission denied: " + e.message
    return
   }
   handler.postDelayed({
    if (generation == measurementGeneration) {
     stopMeasurement()
-    measureStatus?.append("\nMeasurement stopped after 45 seconds")
+    measureStatus?.text = "Timed out after 45 seconds; no stable result saved"
    }
   }, 45000)
  }
@@ -124,11 +218,15 @@ class MainActivity : Activity() {
   measurementRow.addView(heartButton, LinearLayout.LayoutParams(side, side))
   measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(side, side).apply { leftMargin = 8 })
   layout.addView(measurementRow)
-  val sensorStatus = TextView(this).apply { textSize = 15f; text = "Tap a square to start a 45-second live sensor test." }
+  val sensorStatus = TextView(this).apply { textSize = 15f; text = "Stable results are saved and published automatically." }
   layout.addView(sensorStatus)
   measureStatus = sensorStatus
   measureHeartButton = heartButton
   measureOxygenButton = oxygenButton
+  val stopButton = Button(this).apply { text = "Stop measurement"; isEnabled = false }
+  layout.addView(stopButton)
+  measureStopButton = stopButton
+  stopButton.setOnClickListener { stopMeasurement(); sensorStatus.text = "Measurement cancelled" }
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
   val button = Button(this).apply { text = "Send data to MQTT" }
@@ -323,8 +421,7 @@ class MainActivity : Activity() {
         })
       }
       discovery("steps", "Steps", "steps", null, "measurement")
-      discovery("heart_rate", "Heart Rate", "bpm", null, "measurement")
-      discovery("spo2", "SpO2", "%", null, "measurement")
+      // Direct measurements manage heart rate and SpO2 MQTT discovery.
       discovery("last_update", "Last Update", null, "timestamp", null)
       discovery("sleep_duration", "Sleep Duration", "min", "duration", "measurement")
       discovery("sleep_deep", "Deep Sleep", "min", "duration", "measurement")
