@@ -33,7 +33,13 @@ class MainActivity : Activity() {
  private var measureAnimation: TextView? = null
  private var measureHeartButton: Button? = null
  private var measureOxygenButton: Button? = null
- private var measureStopButton: Button? = null
+ private var activeMeasurementType = 0
+ private var lastReadingType = 21
+ private var lastReadingValue = "—"
+ private var latestHeart: TextView? = null
+ private var latestOxygen: TextView? = null
+ private var latestSteps: TextView? = null
+ private var latestSleep: TextView? = null
  private var measurementGeneration = 0
  private var pendingSensorType = 0
  private val measurementDb by lazy {
@@ -63,6 +69,8 @@ class MainActivity : Activity() {
   measureSymbol?.text = if (type == 21) "♥" else "O₂"
   measureUnit?.text = if (type == 21) "bpm" else "%"
   measureStatus?.text = value
+  lastReadingType = type
+  if (value != "…" && value != "—") lastReadingValue = value
  }
  private fun notifyMessage(message: String) {
   Toast.makeText(this, message, Toast.LENGTH_LONG).show()
@@ -73,8 +81,60 @@ class MainActivity : Activity() {
   activeListener = null
   measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = true
-  measureStopButton?.isEnabled = false
+  activeMeasurementType = 0
   measureAnimation?.text = ""
+ }
+ private fun refreshLatest() {
+  Thread {
+   var heart = Settings.System.getInt(contentResolver, "heart_rate", -1).takeIf { it in 35..220 }?.let { "$it bpm" } ?: "—"
+   var oxygen = Settings.System.getInt(contentResolver, "OXYGEN", -1).takeIf { it in 70..100 }?.let { "$it %" } ?: "—"
+   try {
+    measurementDb.readableDatabase.rawQuery(
+     "SELECT sensor_type, heart_rate, spo2 FROM measurements ORDER BY id DESC LIMIT 30", null
+    ).use { cursor ->
+     var hasHeart = false
+     var hasOxygen = false
+     while (cursor.moveToNext() && (!hasHeart || !hasOxygen)) {
+      val type = cursor.getInt(0)
+      if (!hasHeart && type == 21 && !cursor.isNull(1)) {
+       heart = cursor.getInt(1).toString() + " bpm"
+       hasHeart = true
+      }
+      if (!hasOxygen && type == 31 && !cursor.isNull(2)) {
+       oxygen = cursor.getInt(2).toString() + " %"
+       hasOxygen = true
+      }
+     }
+    }
+   } catch (_: Exception) {}
+   val steps = try {
+    val n = Settings.System.getInt(contentResolver, "today_steps", -1)
+    if (n >= 0) "$n" else "—"
+   } catch (_: Exception) { "—" }
+   var sleep = "—"
+   try {
+    contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
+     null, null, null, "_id DESC")?.use { cursor ->
+     if (cursor.moveToFirst()) {
+      fun minutes(prefix: String): Int? {
+       val h = cursor.getColumnIndex(prefix + "HH")
+       val m = cursor.getColumnIndex(prefix + "MM")
+       if (h < 0 || m < 0 || cursor.isNull(h) || cursor.isNull(m)) return null
+       val hh = cursor.getString(h)?.toIntOrNull()
+       val mm = cursor.getString(m)?.toIntOrNull()
+       return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
+      }
+      minutes("sum")?.let { sleep = "${it / 60}h ${it % 60}m" }
+     }
+    }
+   } catch (_: Exception) {}
+   runOnUiThread {
+    latestHeart?.text = heart
+    latestOxygen?.text = oxygen
+    latestSteps?.text = steps
+    latestSleep?.text = sleep
+   }
+  }.start()
  }
  private fun publishMeasurement(type: Int, heart: Int, oxygen: Int, time: String) {
   val host = prefs.getString("host", "")?.trim().orEmpty()
@@ -140,6 +200,7 @@ class MainActivity : Activity() {
     }
     measurementDb.writableDatabase.insertOrThrow("measurements", null, values)
     saved = true
+    runOnUiThread { refreshLatest() }
 
     publishMeasurement(type, heart, oxygen, time)
 
@@ -155,6 +216,11 @@ class MainActivity : Activity() {
   handler.postDelayed({ animateMeasurement(generation, frame + 1) }, 350)
  }
  private fun beginMeasurement(type: Int) {
+  if (activeMeasurementType == type) {
+   stopMeasurement()
+   showReading(lastReadingType, lastReadingValue)
+   return
+  }
   stopMeasurement()
   if (android.os.Build.VERSION.SDK_INT >= 23 &&
    checkSelfPermission(Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
@@ -170,9 +236,13 @@ class MainActivity : Activity() {
   val generation = measurementGeneration
   val startedAt = android.os.SystemClock.elapsedRealtime()
   val recent = java.util.ArrayDeque<Pair<Int, Int>>()
-  measureHeartButton?.isEnabled = false
+  activeMeasurementType = type
+  measureHeartButton?.isEnabled = true
   measureOxygenButton?.isEnabled = false
-  measureStopButton?.isEnabled = true
+  if (type == 31) {
+   measureHeartButton?.isEnabled = false
+   measureOxygenButton?.isEnabled = true
+  }
   showReading(type, "…")
   animateMeasurement(generation)
   val listener = object : SensorEventListener {
@@ -300,11 +370,46 @@ class MainActivity : Activity() {
   measureUnit = unit
   measureHeartButton = heartButton
   measureOxygenButton = oxygenButton
-  val stopButton = Button(this).apply { text = "Stop"; isEnabled = false }
-  styleButton(stopButton, skin)
-  layout.addView(stopButton)
-  measureStopButton = stopButton
-  stopButton.setOnClickListener { stopMeasurement(); sensorStatus.text = "—" }
+  fun statCell(icon: String, label: String, value: String): Pair<LinearLayout, TextView> {
+   val cell = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    gravity = Gravity.CENTER
+    setPadding((4 * density).toInt(), (7 * density).toInt(), (4 * density).toInt(), (7 * density).toInt())
+   }
+   val line = TextView(this).apply {
+    text = icon + "  " + value
+    textSize = 17f
+    gravity = Gravity.CENTER
+    setTextColor(skin.foreground)
+    setSingleLine(true)
+   }
+   val caption = TextView(this).apply {
+    text = label
+    textSize = 13f
+    gravity = Gravity.CENTER
+    setTextColor(skin.accent)
+    setSingleLine(true)
+   }
+   cell.addView(line)
+   cell.addView(caption)
+   return Pair(cell, line)
+  }
+  val summaryRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  val summaryRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  val heartCell = statCell("♥", "Pulse", "—")
+  val oxygenCell = statCell("O₂", "Oxygen", "—")
+  val stepsCell = statCell("♟", "Steps", "—")
+  val sleepCell = statCell("☾", "Sleep", "—")
+  for ((row, pair) in listOf(
+   Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
+   Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
+  )) row.addView(pair.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+  layout.addView(summaryRow1)
+  layout.addView(summaryRow2)
+  latestHeart = heartCell.second
+  latestOxygen = oxygenCell.second
+  latestSteps = stepsCell.second
+  latestSleep = sleepCell.second
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
   val button = Button(this).apply { text = "Send data" }
@@ -320,6 +425,7 @@ class MainActivity : Activity() {
   layout.addView(lower)
   layout.addView(lower2)
   show(layout)
+  refreshLatest()
   settings.setOnClickListener { showSettings() }
   history.setOnClickListener {
    val hostname = prefs.getString("host", "")?.trim().orEmpty()
