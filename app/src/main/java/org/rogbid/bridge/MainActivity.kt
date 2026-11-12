@@ -52,7 +52,7 @@ class MainActivity : Activity() {
   val id = prefs.getString("device", "king")?.trim().orEmpty()
   if (host.isEmpty() || port == null || port !in 1..65535 ||
    !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("Configure MQTT in Settings")
-  val topic = "rogbid/$id/measurements"
+  val topic = "rogbid/$id/measurements/" + (if (type == 21) "heart_rate" else "spo2")
   val client = MqttClient((if (port == 8883) "ssl" else "tcp") + "://$host:$port",
    "rogbid-measure-$id-" + System.currentTimeMillis(), MemoryPersistence())
   try {
@@ -73,7 +73,7 @@ class MainActivity : Activity() {
     val config = JSONObject().apply {
      put("name", label)
      put("unique_id", "rogbid_" + id + "_" + key)
-     put("state_topic", topic)
+     put("state_topic", "rogbid/$id/measurements/" + key)
      put("value_template", "{{ value_json." + key + " }}")
      put("unit_of_measurement", unit)
      put("state_class", "measurement")
@@ -85,8 +85,7 @@ class MainActivity : Activity() {
    discovery("heart_rate", "Heart Rate", "bpm")
    discovery("spo2", "SpO2", "%")
    val data = JSONObject().put("measured_at", time).put("sensor_type", type)
-    .put("heart_rate", heart)
-   if (type == 31) data.put("spo2", oxygen)
+   if (type == 21) data.put("heart_rate", heart) else data.put("spo2", oxygen)
    client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
     qos = 1
     isRetained = true
