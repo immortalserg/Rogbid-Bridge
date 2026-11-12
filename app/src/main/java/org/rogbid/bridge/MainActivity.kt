@@ -10,9 +10,7 @@ import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.View
 import android.widget.LinearLayout
-import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -105,7 +103,8 @@ class MainActivity : Activity() {
   orientation = LinearLayout.VERTICAL
   setPadding(24, 24, 24, 24)
  }
- private fun show(view: LinearLayout) {\n  stopMeasurement()
+ private fun show(view: LinearLayout) {
+  stopMeasurement()
   setContentView(ScrollView(this).apply { addView(view) })
  }
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,8 +118,8 @@ class MainActivity : Activity() {
   val layout = page()
   layout.addView(TextView(this).apply { text = "Rogbid Bridge"; textSize = 24f })
   val measurementRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val heartButton = Button(this).apply { text = "♥\\nHeart rate"; gravity = Gravity.CENTER }
-  val oxygenButton = Button(this).apply { text = "O₂\\nOxygen"; gravity = Gravity.CENTER }
+  val heartButton = Button(this).apply { text = "♥\nHeart rate"; gravity = Gravity.CENTER }
+  val oxygenButton = Button(this).apply { text = "O₂\nOxygen"; gravity = Gravity.CENTER }
   val side = (resources.displayMetrics.widthPixels - 72) / 2
   measurementRow.addView(heartButton, LinearLayout.LayoutParams(side, side))
   measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(side, side).apply { leftMargin = 8 })
