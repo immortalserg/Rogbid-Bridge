@@ -84,12 +84,13 @@ class SleepCollector(private val context: Context) {
   require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(verifiedWakeDate)) {
    "Expected verified wake date in yyyy-MM-dd format"
   }
-  SleepRepository(context).use { repo ->
-   return repo.save(
+  val repo = SleepRepository(context)
+  return try {
+   repo.save(
     verifiedWakeDate, snapshot.start, snapshot.end, snapshot.duration,
     snapshot.deep, snapshot.light, snapshot.fast, snapshot.score, snapshot.stages
    )
-  }
+  } finally { repo.close() }
  }
 
  private fun validClock(value: String): Boolean {
