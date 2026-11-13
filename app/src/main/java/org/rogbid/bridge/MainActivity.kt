@@ -132,7 +132,8 @@ class MainActivity : Activity() {
    var sleep = "—"
    try {
     // Archived sleep takes precedence over the resettable vendor provider.
-    val saved = SleepRepository(this).use { it.latest() }
+    val repo = SleepRepository(this)
+    val saved = try { repo.latest() } finally { repo.close() }
     if (saved != null) {
      val mins = saved.optInt("duration_minutes")
      if (mins > 0) sleep = "${mins / 60}h ${mins % 60}m"
