@@ -646,7 +646,13 @@ class MainActivity : Activity() {
 
  private fun showSleepLatest() {
   stopMeasurement()
-  sleepScreens().latest()
+  try {
+   sleepScreens().latest()
+  } catch (e: Exception) {
+   android.util.Log.e("RogbidSleep", "Sleep screen failed", e)
+   notifyMessage("Sleep screen error: " + (e.message ?: e.javaClass.simpleName))
+   showHome()
+  }
  }
 
  private fun showJournal(kind: String) {
