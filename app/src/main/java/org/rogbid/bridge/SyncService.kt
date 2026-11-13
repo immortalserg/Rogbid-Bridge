@@ -11,12 +11,39 @@ import android.provider.Settings
 import org.eclipse.paho.client.mqttv3.*
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
+import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class SyncService : Service() {
  private val worker = HandlerThread("RogbidMqttSync")
  private lateinit var handler: Handler
  @Volatile private var running = false
  private var sleepReceiverRegistered = false
+ private var sleepBeforeRequest: String? = null
+ private var sleepRequestAt = 0L
+ private fun snapshotKey(s: SleepCollector.Snapshot): String =
+  listOf(s.start, s.end, s.duration.toString(), s.stages).joinToString("|")
+
+ // Accept only a newly changed provider record with a wake time close to now.
+ // The provider has no date; a time-only record cannot otherwise be dated safely.
+ private fun recentWakeDate(wakeTime: String): String? {
+  val parts = wakeTime.split(":")
+  if (parts.size != 2) return null
+  val hour = parts[0].toIntOrNull() ?: return null
+  val minute = parts[1].toIntOrNull() ?: return null
+  if (hour !in 0..23 || minute !in 0..59) return null
+  val now = System.currentTimeMillis()
+  val wake = Calendar.getInstance().apply {
+   set(Calendar.HOUR_OF_DAY, hour)
+   set(Calendar.MINUTE, minute)
+   set(Calendar.SECOND, 0)
+   set(Calendar.MILLISECOND, 0)
+   if (timeInMillis > now) add(Calendar.DAY_OF_MONTH, -1)
+  }
+  if (now - wake.timeInMillis > 3 * 60 * 60 * 1000L) return null
+  return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(wake.time)
+ }
  private val sleepReceiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
    if (intent?.action != "com.wiite.sleep.data" || !running) return
@@ -27,9 +54,16 @@ class SyncService : Service() {
     try {
      val snapshot = SleepCollector(this@SyncService).read()
      if (snapshot != null) {
-      android.util.Log.i("RogbidSleep", "Sleep snapshot received: " +
-       snapshot.start + " - " + snapshot.end +
-       ", minutes=" + snapshot.duration)
+      val key = snapshotKey(snapshot)
+      val wakeDate = recentWakeDate(snapshot.end)
+      if (sleepRequestAt > 0L && key != sleepBeforeRequest && wakeDate != null) {
+       val saved = SleepCollector(this@SyncService).archive(snapshot, wakeDate)
+       android.util.Log.i("RogbidSleep",
+        "Fresh sleep snapshot: wakeDate=" + wakeDate + ", inserted=" + saved)
+      } else {
+       android.util.Log.i("RogbidSleep",
+        "Sleep snapshot not archived: unchanged provider record or unverified wake date")
+      }
      } else {
       android.util.Log.w("RogbidSleep", "Sleep response received but provider has no valid snapshot")
      }
@@ -48,6 +82,13 @@ class SyncService : Service() {
    prefs.edit().putString("last_attempt", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    try {
     // Request a fresh UART sleep packet. The reply is handled asynchronously.
+    sleepBeforeRequest = try {
+     SleepCollector(this@SyncService).read()?.let { snapshotKey(it) }
+    } catch (e: Exception) {
+     android.util.Log.w("RogbidSleep", "Cannot read baseline snapshot", e)
+     null
+    }
+    sleepRequestAt = System.currentTimeMillis()
     sendBroadcast(Intent("com.wiite.get.sleep.data"))
     publish()
     prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
