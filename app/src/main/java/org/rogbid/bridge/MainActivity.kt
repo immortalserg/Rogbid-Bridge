@@ -739,7 +739,7 @@ class MainActivity : Activity() {
          val name = cursor.getColumnName(i)
          val value = if (cursor.isNull(i)) "NULL" else cursor.getString(i) ?: "NULL"
          result.append("  ").append(name).append(" = ")
-          .append(value.take(300)).append("\n")
+          .append(if (name == "dataList") value else value.take(300)).append("\n")
         }
        }
        if (cursor.count > count) result.append("... additional rows omitted\n")
