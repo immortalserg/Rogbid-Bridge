@@ -628,6 +628,12 @@ class MainActivity : Activity() {
   layout.addView(TextView(this).apply {
    text = title; textSize = 22f; setTextColor(skin.foreground)
   })
+  if (kind == "sleep") {
+   val diagnostic = Button(this).apply { text = "Diagnose sleep source" }
+   styleButton(diagnostic, skin)
+   layout.addView(diagnostic)
+   diagnostic.setOnClickListener { showSleepDiagnostics() }
+  }
   val entries = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
   layout.addView(entries)
   val back = Button(this).apply { text = "Back" }
@@ -687,6 +693,79 @@ class MainActivity : Activity() {
     })
    }
   }.start()
+ }
+ private fun showSleepDiagnostics() {
+  val skin = currentSkin()
+  val layout = page()
+  layout.addView(TextView(this).apply {
+   text = "Sleep source diagnostics"; textSize = 21f; setTextColor(skin.foreground)
+  })
+  val hint = TextView(this).apply {
+   text = "Capture before and after opening the stock Sleep app. Compare IDs, times and all fields."
+   textSize = 14f; setTextColor(skin.foreground)
+  }
+  layout.addView(hint)
+  val output = TextView(this).apply {
+   text = "Tap Read source"; textSize = 13f; setTextColor(skin.foreground)
+   setTextIsSelectable(true)
+  }
+  val read = Button(this).apply { text = "Read source" }
+  val copy = Button(this).apply { text = "Copy snapshot" }
+  val back = Button(this).apply { text = "Back" }
+  for (button in arrayOf(read, copy, back)) {
+   styleButton(button, skin)
+   layout.addView(button)
+  }
+  layout.addView(output)
+  var snapshot = ""
+  read.setOnClickListener {
+   read.isEnabled = false
+   output.text = "Reading..."
+   Thread {
+    val result = StringBuilder()
+    result.append("Captured: ").append(java.time.ZonedDateTime.now()).append("\\n")
+    val uri = Uri.parse("content://com.wiite.provider/sleep")
+    for (order in arrayOf("_id DESC", null)) {
+     result.append("\\nQuery order: ").append(order ?: "provider default").append("\\n")
+     try {
+      contentResolver.query(uri, null, null, null, order)?.use { cursor ->
+       result.append("Columns: ").append(cursor.columnNames.joinToString()).append("\\n")
+       result.append("Rows: ").append(cursor.count).append("\\n")
+       var count = 0
+       while (cursor.moveToNext() && count < 20) {
+        count++
+        result.append("ROW ").append(count).append(":\\n")
+        for (i in 0 until cursor.columnCount) {
+         val name = cursor.getColumnName(i)
+         val value = if (cursor.isNull(i)) "NULL" else cursor.getString(i) ?: "NULL"
+         result.append("  ").append(name).append(" = ")
+          .append(value.take(300)).append("\\n")
+        }
+       }
+       if (cursor.count > count) result.append("... additional rows omitted\\n")
+      } ?: result.append("Provider returned NULL cursor\\n")
+     } catch (e: Exception) {
+      result.append("ERROR: ").append(e.javaClass.simpleName).append(": ")
+       .append(e.message).append("\\n")
+     }
+    }
+    snapshot = result.toString()
+    runOnUiThread {
+     output.text = snapshot
+     read.isEnabled = true
+    }
+   }.start()
+  }
+  copy.setOnClickListener {
+   if (snapshot.isEmpty()) notifyMessage("Read source first")
+   else {
+    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid sleep snapshot", snapshot))
+    notifyMessage("Snapshot copied")
+   }
+  }
+  back.setOnClickListener { showJournal("sleep") }
+  show(layout)
  }
  private fun showSettings() {
   val layout = page()
