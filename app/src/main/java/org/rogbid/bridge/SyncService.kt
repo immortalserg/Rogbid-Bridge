@@ -2,6 +2,9 @@ package org.rogbid.bridge
 
 import android.app.*
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.*
 import android.provider.Settings
@@ -13,6 +16,29 @@ class SyncService : Service() {
  private val worker = HandlerThread("RogbidMqttSync")
  private lateinit var handler: Handler
  @Volatile private var running = false
+ private var sleepReceiverRegistered = false
+ private val sleepReceiver = object : BroadcastReceiver() {
+  override fun onReceive(context: Context?, intent: Intent?) {
+   if (intent?.action != "com.wiite.sleep.data" || !running) return
+   // The stock sleep app receives the same broadcast and updates its provider
+   // asynchronously. Read only after it has had time to process the packet.
+   handler.postDelayed({
+    if (!running) return@postDelayed
+    try {
+     val snapshot = SleepCollector(this@SyncService).read()
+     if (snapshot != null) {
+      android.util.Log.i("RogbidSleep", "Sleep snapshot received: " +
+       snapshot.start + " - " + snapshot.end +
+       ", minutes=" + snapshot.duration)
+     } else {
+      android.util.Log.w("RogbidSleep", "Sleep response received but provider has no valid snapshot")
+     }
+    } catch (e: Exception) {
+     android.util.Log.e("RogbidSleep", "Cannot read sleep snapshot", e)
+    }
+   }, 2000L)
+  }
+ }
  private fun intervalMs(): Long = (getSharedPreferences("mqtt", MODE_PRIVATE)
   .getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L)
  private val sync = object : Runnable {
@@ -21,6 +47,8 @@ class SyncService : Service() {
    val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
    prefs.edit().putString("last_attempt", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    try {
+    // Request a fresh UART sleep packet. The reply is handled asynchronously.
+    sendBroadcast(Intent("com.wiite.get.sleep.data"))
     publish()
     prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    } catch (e: Exception) {
@@ -46,6 +74,8 @@ class SyncService : Service() {
    .setOngoing(true)
    .build()
   startForeground(1001, notification)
+  registerReceiver(sleepReceiver, IntentFilter("com.wiite.sleep.data"))
+  sleepReceiverRegistered = true
  }
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   if (intent?.action == "STOP") {
@@ -104,6 +134,10 @@ class SyncService : Service() {
  override fun onDestroy() {
   running = false
   handler.removeCallbacks(sync)
+  if (sleepReceiverRegistered) {
+   unregisterReceiver(sleepReceiver)
+   sleepReceiverRegistered = false
+  }
   worker.quitSafely()
   super.onDestroy()
  }
