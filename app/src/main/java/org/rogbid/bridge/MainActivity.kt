@@ -324,8 +324,6 @@ class MainActivity : Activity() {
  }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-  stopService(android.content.Intent(this, SyncService::class.java))
-  prefs.edit().putBoolean("auto", false).apply()
   showHome()
  }
  private fun showHome() {
