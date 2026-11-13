@@ -815,6 +815,8 @@ class MainActivity : Activity() {
     hint = label
     setText(value)
     inputType = type
+    setTextColor(currentSkin().foreground)
+    setHintTextColor(currentSkin().foreground and 0x00FFFFFF or 0x99000000)
     setSingleLine(true)
     layout.addView(this)
    }
@@ -842,7 +844,7 @@ class MainActivity : Activity() {
    prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
   val save = Button(this).apply { text = "Save settings" }
   val back = Button(this).apply { text = "Back" }
-  val status = TextView(this)
+  val status = TextView(this).apply { setTextColor(currentSkin().foreground) }
   layout.addView(save)
   layout.addView(back)
   layout.addView(status)
