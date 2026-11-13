@@ -816,7 +816,7 @@ class MainActivity : Activity() {
     setText(value)
     inputType = type
     setTextColor(currentSkin().foreground)
-    setHintTextColor(currentSkin().foreground and 0x00FFFFFF or 0x99000000)
+    setHintTextColor((currentSkin().foreground and 0x00FFFFFF) or 0x99000000.toInt())
     setSingleLine(true)
     layout.addView(this)
    }
