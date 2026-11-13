@@ -131,21 +131,19 @@ class MainActivity : Activity() {
    } catch (_: Exception) { "—" }
    var sleep = "—"
    try {
-    contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
-     null, null, null, "_id DESC")?.use { cursor ->
-     if (cursor.moveToFirst()) {
-      fun minutes(prefix: String): Int? {
-       val h = cursor.getColumnIndex(prefix + "HH")
-       val m = cursor.getColumnIndex(prefix + "MM")
-       if (h < 0 || m < 0 || cursor.isNull(h) || cursor.isNull(m)) return null
-       val hh = cursor.getString(h)?.toIntOrNull()
-       val mm = cursor.getString(m)?.toIntOrNull()
-       return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
-      }
-      minutes("sum")?.let { sleep = "${it / 60}h ${it % 60}m" }
+    // Archived sleep takes precedence over the resettable vendor provider.
+    val saved = SleepRepository(this).use { it.latest() }
+    if (saved != null) {
+     val mins = saved.optInt("duration_minutes")
+     if (mins > 0) sleep = "${mins / 60}h ${mins % 60}m"
+    } else {
+     SleepCollector(this).read()?.let {
+      sleep = "${it.duration / 60}h ${it.duration % 60}m"
      }
     }
-   } catch (_: Exception) {}
+   } catch (e: Exception) {
+    android.util.Log.w("RogbidSleep", "Cannot load last sleep", e)
+   }
    runOnUiThread {
     lastPulse = heart
     lastOxygen = oxygen
@@ -412,7 +410,7 @@ class MainActivity : Activity() {
   heartCell.first.setOnClickListener { showJournal("heart") }
   oxygenCell.first.setOnClickListener { showJournal("oxygen") }
   stepsCell.first.setOnClickListener { showJournal("steps") }
-  sleepCell.first.setOnClickListener { showJournal("sleep") }
+  sleepCell.first.setOnClickListener { showSleepLatest() }
   measureHeartButton = heartButton
   measureOxygenButton = oxygenButton
   heartButton.setOnClickListener { beginMeasurement(21) }
@@ -641,6 +639,16 @@ class MainActivity : Activity() {
    }.start()
   }
  }
+ private fun sleepScreens() = SleepScreens(
+  this, currentSkin().background, currentSkin().foreground,
+  currentSkin().accent, currentSkin().button
+ ) { showHome() }
+
+ private fun showSleepLatest() {
+  stopMeasurement()
+  sleepScreens().latest()
+ }
+
  private fun showJournal(kind: String) {
   val skin = currentSkin()
   val layout = page()
@@ -654,6 +662,10 @@ class MainActivity : Activity() {
    text = title; textSize = 22f; setTextColor(skin.foreground)
   })
   if (kind == "sleep") {
+   sleepScreens().history()
+   return
+  }
+  if (kind == "sleep-diagnostics") {
    val diagnostic = Button(this).apply { text = "Diagnose sleep source" }
    styleButton(diagnostic, skin)
    layout.addView(diagnostic)
