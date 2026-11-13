@@ -29,12 +29,12 @@ class SleepScreens(
   val root = LinearLayout(activity).apply {
    orientation = LinearLayout.VERTICAL
    setPadding(dp(12), dp(12), dp(12), dp(12))
-   setBackgroundColor(background)
+   setBackgroundColor(this@SleepScreens.background)
   }
   root.addView(TextView(activity).apply {
    text = title
    textSize = 21f
-   setTextColor(foreground)
+   setTextColor(this@SleepScreens.foreground)
    setPadding(0, 0, 0, dp(10))
   })
   activity.setContentView(ScrollView(activity).apply {
