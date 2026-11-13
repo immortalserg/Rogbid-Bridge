@@ -723,33 +723,36 @@ class MainActivity : Activity() {
    output.text = "Reading..."
    Thread {
     val result = StringBuilder()
-    result.append("Captured: ").append(java.time.ZonedDateTime.now()).append("\\n")
+    result.append("Captured: ").append(java.time.ZonedDateTime.now()).append("\n")
     val uri = Uri.parse("content://com.wiite.provider/sleep")
     for (order in arrayOf("_id DESC", null)) {
-     result.append("\\nQuery order: ").append(order ?: "provider default").append("\\n")
+     result.append("\nQuery order: ").append(order ?: "provider default").append("\n")
      try {
       contentResolver.query(uri, null, null, null, order)?.use { cursor ->
-       result.append("Columns: ").append(cursor.columnNames.joinToString()).append("\\n")
-       result.append("Rows: ").append(cursor.count).append("\\n")
+       result.append("Columns: ").append(cursor.columnNames.joinToString()).append("\n")
+       result.append("Rows: ").append(cursor.count).append("\n")
        var count = 0
        while (cursor.moveToNext() && count < 20) {
         count++
-        result.append("ROW ").append(count).append(":\\n")
+        result.append("ROW ").append(count).append(":\n")
         for (i in 0 until cursor.columnCount) {
          val name = cursor.getColumnName(i)
          val value = if (cursor.isNull(i)) "NULL" else cursor.getString(i) ?: "NULL"
          result.append("  ").append(name).append(" = ")
-          .append(value.take(300)).append("\\n")
+          .append(value.take(300)).append("\n")
         }
        }
-       if (cursor.count > count) result.append("... additional rows omitted\\n")
-      } ?: result.append("Provider returned NULL cursor\\n")
+       if (cursor.count > count) result.append("... additional rows omitted\n")
+      } ?: result.append("Provider returned NULL cursor\n")
      } catch (e: Exception) {
       result.append("ERROR: ").append(e.javaClass.simpleName).append(": ")
-       .append(e.message).append("\\n")
+       .append(e.message).append("\n")
      }
     }
     snapshot = result.toString()
+    android.util.Log.d("RogbidSleep", "SNAPSHOT BEGIN")
+    snapshot.lineSequence().forEach { line -> android.util.Log.d("RogbidSleep", line) }
+    android.util.Log.d("RogbidSleep", "SNAPSHOT END")
     runOnUiThread {
      output.text = snapshot
      read.isEnabled = true
