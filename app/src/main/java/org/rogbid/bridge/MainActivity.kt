@@ -12,6 +12,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.graphics.Color
+import android.content.res.ColorStateList
+import android.graphics.drawable.RippleDrawable
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
@@ -63,10 +65,19 @@ class MainActivity : Activity() {
  private fun styleButton(button: Button, skin: Skin) {
   button.setTextColor(skin.foreground)
   button.isAllCaps = false
-  button.background = GradientDrawable().apply {
+  val radius = 18f * resources.displayMetrics.density
+  val shape = GradientDrawable().apply {
    setColor(skin.button)
-   cornerRadius = 18f * resources.displayMetrics.density
+   cornerRadius = radius
   }
+  val mask = GradientDrawable().apply {
+   setColor(Color.WHITE)
+   cornerRadius = radius
+  }
+  button.background = RippleDrawable(
+   ColorStateList.valueOf(skin.accent and 0x00FFFFFF or 0x66000000),
+   shape, mask
+  )
  }
  private fun showReading(type: Int, value: String) {
   val target = if (type == 21) pulseValue else oxygenValue
@@ -347,19 +358,29 @@ class MainActivity : Activity() {
    val cell = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     gravity = Gravity.CENTER
-    setPadding((4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt())
-    background = GradientDrawable().apply {
+    setPadding((4 * density).toInt(), (7 * density).toInt(), (4 * density).toInt(), (7 * density).toInt())
+    val tileShape = GradientDrawable().apply {
      setColor(skin.button)
      cornerRadius = 16 * density
     }
+    val tileMask = GradientDrawable().apply {
+     setColor(Color.WHITE)
+     cornerRadius = 16 * density
+    }
+    background = RippleDrawable(
+     ColorStateList.valueOf(skin.accent and 0x00FFFFFF or 0x66000000),
+     tileShape, tileMask
+    )
+    isClickable = true
+    isFocusable = true
    }
    val caption = TextView(this).apply {
-    text = "$icon  $label"; textSize = 17f; gravity = Gravity.CENTER
+    text = "$icon  $label"; textSize = 15f; gravity = Gravity.CENTER
     setTextColor(skin.accent)
     setSingleLine(true)
    }
    val value = TextView(this).apply {
-    text = "—"; textSize = 28f; gravity = Gravity.CENTER
+    text = "—"; textSize = 25f; gravity = Gravity.CENTER
     typeface = Typeface.DEFAULT_BOLD
     setTextColor(skin.foreground)
     setSingleLine(true)
@@ -377,7 +398,7 @@ class MainActivity : Activity() {
   for ((row, pair) in listOf(
    Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
    Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
-  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (100 * density).toInt(), 1f).apply {
+  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (88 * density).toInt(), 1f).apply {
    setMargins((3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt())
   })
   layout.addView(summaryRow1)
@@ -403,9 +424,11 @@ class MainActivity : Activity() {
   val lower = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val lower2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   for (control in arrayOf(button, history, settings)) styleButton(control, skin)
-  lower.addView(button, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { rightMargin = (4 * density).toInt() })
-  lower.addView(history, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { leftMargin = (4 * density).toInt() })
-  lower2.addView(settings, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f))
+  val buttonGap = (8 * density).toInt()
+  lower.addView(button, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { rightMargin = buttonGap / 2 })
+  lower.addView(history, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { leftMargin = buttonGap / 2 })
+  lower2.addView(settings, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f))
+  lower2.setPadding(0, buttonGap, 0, 0)
   layout.addView(lower)
   layout.addView(lower2)
   show(layout)
