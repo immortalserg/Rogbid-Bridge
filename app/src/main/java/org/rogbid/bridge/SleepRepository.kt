@@ -57,22 +57,36 @@ class SleepRepository(context: Context) :
   ) != -1L
  }
 
+ fun history(limit: Int = 100): List<JSONObject> {
+  val records = mutableListOf<JSONObject>()
+  readableDatabase.rawQuery(
+   "SELECT * FROM sleep_history ORDER BY sleep_date DESC, id DESC LIMIT " +
+    limit.coerceIn(1, 500), null
+  ).use { cursor ->
+   while (cursor.moveToNext()) records.add(rowJson(cursor))
+  }
+  return records
+ }
+
+ private fun rowJson(cursor: android.database.Cursor): JSONObject =
+  JSONObject().apply {
+   for (i in 0 until cursor.columnCount) {
+    if (cursor.isNull(i)) continue
+    val name = cursor.getColumnName(i)
+    when (name) {
+     "id", "duration_minutes", "deep_minutes", "light_minutes",
+     "fast_minutes", "score", "first_seen" -> put(name, cursor.getLong(i))
+     else -> put(name, cursor.getString(i))
+    }
+   }
+  }
+
  fun latest(): JSONObject? {
   readableDatabase.rawQuery(
    "SELECT * FROM sleep_history ORDER BY sleep_date DESC, id DESC LIMIT 1", null
   ).use { cursor ->
    if (!cursor.moveToFirst()) return null
-   return JSONObject().apply {
-    for (i in 0 until cursor.columnCount) {
-     if (cursor.isNull(i)) continue
-     val name = cursor.getColumnName(i)
-     when (name) {
-      "id", "duration_minutes", "deep_minutes", "light_minutes",
-      "fast_minutes", "score", "first_seen" -> put(name, cursor.getLong(i))
-      else -> put(name, cursor.getString(i))
-     }
-    }
-   }
+   return rowJson(cursor)
   }
  }
 }
