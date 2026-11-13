@@ -59,7 +59,10 @@ class SleepScreens(
   setTextColor(this@SleepScreens.foreground)
   setPadding(dp(4), dp(6), dp(4), dp(6))
  }
- private fun records(): List<JSONObject> = SleepRepository(activity).use { it.history() }
+ private fun records(): List<JSONObject> {
+  val repo = SleepRepository(activity)
+  return try { repo.history() } finally { repo.close() }
+ }
  private fun duration(minutes: Int): String = "${minutes / 60} ч ${minutes % 60} мин"
 
  fun latest() {
