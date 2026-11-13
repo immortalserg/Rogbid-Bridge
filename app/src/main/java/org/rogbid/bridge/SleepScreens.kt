@@ -38,7 +38,7 @@ class SleepScreens(
    setPadding(0, 0, 0, dp(10))
   })
   activity.setContentView(ScrollView(activity).apply {
-   setBackgroundColor(background)
+   setBackgroundColor(this@SleepScreens.background)
    addView(root)
   })
   return root
@@ -46,7 +46,7 @@ class SleepScreens(
  private fun button(title: String, action: () -> Unit): Button = Button(activity).apply {
   text = title
   isAllCaps = false
-  setTextColor(foreground)
+  setTextColor(this@SleepScreens.foreground)
   background = GradientDrawable().apply {
    setColor(buttonColor)
    cornerRadius = dp(12).toFloat()
@@ -56,7 +56,7 @@ class SleepScreens(
  private fun label(value: String, size: Float = 15f): TextView = TextView(activity).apply {
   text = value
   textSize = size
-  setTextColor(foreground)
+  setTextColor(this@SleepScreens.foreground)
   setPadding(dp(4), dp(6), dp(4), dp(6))
  }
  private fun records(): List<JSONObject> = SleepRepository(activity).use { it.history() }
