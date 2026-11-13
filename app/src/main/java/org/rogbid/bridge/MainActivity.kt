@@ -2,6 +2,7 @@ package org.rogbid.bridge
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -324,6 +325,9 @@ class MainActivity : Activity() {
  }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  if (prefs.getBoolean("auto", false)) {
+   startForegroundService(Intent(this, SyncService::class.java))
+  }
   showHome()
  }
  private fun showHome() {
@@ -793,6 +797,14 @@ class MainActivity : Activity() {
   skinChoice.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, skinNames)
   skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
   layout.addView(skinChoice)
+  val autoSync = CheckBox(this).apply {
+   text = "Automatic background MQTT and sleep sync"
+   isChecked = prefs.getBoolean("auto", false)
+   setTextColor(currentSkin().foreground)
+  }
+  layout.addView(autoSync)
+  val interval = field("Sync interval (minutes, 1-60)",
+   prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
   val save = Button(this).apply { text = "Save settings" }
   val back = Button(this).apply { text = "Back" }
   val status = TextView(this)
@@ -801,15 +813,24 @@ class MainActivity : Activity() {
   layout.addView(status)
   save.setOnClickListener {
    val p = port.text.toString().toIntOrNull()
+   val intervalMinutes = interval.text.toString().toIntOrNull()
    val d = device.text.toString().trim()
    if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
+    intervalMinutes == null || intervalMinutes !in 1..60 ||
     !d.matches(Regex("[A-Za-z0-9_-]+"))) {
     status.text = "Invalid host, port or device ID"
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", p.toString()).putString("user", user.text.toString())
      .putString("password", pass.text.toString()).putString("device", d)
-      .putString("skin", skinKeys[skinChoice.selectedItemPosition]).apply()
+      .putString("skin", skinKeys[skinChoice.selectedItemPosition])
+      .putInt("interval_minutes", intervalMinutes)
+      .putBoolean("auto", autoSync.isChecked).apply()
+    if (autoSync.isChecked) {
+     startForegroundService(Intent(this, SyncService::class.java))
+    } else {
+     stopService(Intent(this, SyncService::class.java))
+    }
     showHome()
    }
   }
