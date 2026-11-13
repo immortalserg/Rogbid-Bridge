@@ -56,13 +56,13 @@ class SyncService : Service() {
      if (snapshot != null) {
       val key = snapshotKey(snapshot)
       val wakeDate = recentWakeDate(snapshot.end)
-      if (sleepRequestAt > 0L && key != sleepBeforeRequest && wakeDate != null) {
+      if (sleepRequestAt > 0L && wakeDate != null) {
        val saved = SleepCollector(this@SyncService).archive(snapshot, wakeDate)
        android.util.Log.i("RogbidSleep",
         "Fresh sleep snapshot: wakeDate=" + wakeDate + ", inserted=" + saved)
       } else {
        android.util.Log.i("RogbidSleep",
-        "Sleep snapshot not archived: unchanged provider record or unverified wake date")
+        "Sleep snapshot not archived: missing recent wake date")
       }
      } else {
       android.util.Log.w("RogbidSleep", "Sleep response received but provider has no valid snapshot")
