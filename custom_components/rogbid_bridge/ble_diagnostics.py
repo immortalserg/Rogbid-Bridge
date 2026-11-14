@@ -121,8 +121,10 @@ class GattDiagnostics:
 
 
     async def _read_heart_history(self, client):
-        """Read up to ten heart records in bounded single-record GATT pages."""
-        after_id = 0
+        """Resume heart history from a durable cursor, up to ten records per connection."""
+        after_id = await self.hass.async_add_executor_job(
+            self.journal.get_sync_cursor, self.expected_device_id, "heart"
+        )
         count = 0
         for _ in range(10):
             request = json.dumps({"type": "heart_history", "after_id": after_id})
@@ -152,9 +154,12 @@ class GattDiagnostics:
                 self.journal.insert, self.expected_device_id, "heart",
                 payload["id"], measured_at, payload,
             )
+            await self.hass.async_add_executor_job(
+                self.journal.save_sync_cursor, self.expected_device_id, "heart", record_id
+            )
             after_id = record_id
             count += 1
-        _LOGGER.warning("Watch Bridge GATT: heart history received=%s", count)
+        _LOGGER.warning("Watch Bridge GATT: heart history received=%s cursor=%s", count, after_id)
 
     def close(self):
         if self.task is not None and not self.task.done():
