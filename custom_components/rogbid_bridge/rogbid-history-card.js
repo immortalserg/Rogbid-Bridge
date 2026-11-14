@@ -416,6 +416,11 @@ class RogbidHistoryCard extends HTMLElement {
       const bar=make("rect",{x,y:218-height,width,height,rx:2,fill:"var(--primary-color)"});
       const tooltip=make("title",{},bar);
       tooltip.textContent=m.label+": "+(m.days?formatter.format(m.sum):"—")+" ("+m.days+" days)";
+      if (options.show_values === true && m.days) {
+        const valueLabel=make("text",{x:x+width/2,y:Math.max(18,213-height),
+          "text-anchor":"middle",fill:"currentColor","font-size":count===12?10:12});
+        valueLabel.textContent=formatter.format(m.sum);
+      }
       const label=make("text",{x:x+width/2,y:239,"text-anchor":"middle",fill:"currentColor","font-size":count===12?10:12});
       label.textContent=m.label;
     });
@@ -673,10 +678,16 @@ class RogbidHistoryCardEditor extends HTMLElement {
         const option=document.createElement("option");option.value=value;option.textContent=label;position.append(option);
       }
       position.value=options.position==="after"?"after":"before";
+      const values=document.createElement("input");values.type="checkbox";
+      values.checked=options.show_values===true;
+      const valuesLabel=document.createElement("label");
+      valuesLabel.style.cssText="display:flex;gap:4px;align-items:center";
+      valuesLabel.append(values,document.createTextNode(
+        rogbidLang(this._config,this._hass)==="ru"?"Показывать значения":"Show values"));
       const save=()=>this._update("monthly_charts",{...(this._config.monthly_charts||{}),
-        [kind]:{enabled:toggle.checked,months:Number(months.value),position:position.value}});
-      toggle.addEventListener("change",save);months.addEventListener("change",save);position.addEventListener("change",save);
-      row.append(toggle,name,months,position);this.append(row);
+        [kind]:{enabled:toggle.checked,months:Number(months.value),position:position.value,show_values:values.checked}});
+      toggle.addEventListener("change",save);months.addEventListener("change",save);position.addEventListener("change",save);values.addEventListener("change",save);
+      row.append(toggle,name,months,position,valuesLabel);this.append(row);
     }
     const modeTitle=document.createElement("div");
     modeTitle.textContent=t("display");modeTitle.style.marginTop="12px";this.append(modeTitle);
