@@ -25,6 +25,20 @@ class Journal:
 
     def insert(self, device_id: str, kind: str, record_id: str, measured_at: str, payload: dict) -> bool:
         with sqlite3.connect(self.path) as db:
+            if kind == "steps":
+                # Today's step totals evolve throughout the day.
+                existing = db.execute(
+                    "SELECT payload FROM records WHERE device_id = ? AND kind = ? AND record_id = ?",
+                    (device_id, kind, record_id),
+                ).fetchone()
+                if existing is not None:
+                    if json.loads(existing[0]) == payload:
+                        return False
+                    db.execute(
+                        "UPDATE records SET payload = ?, measured_at = ?, received_at = CURRENT_TIMESTAMP WHERE device_id = ? AND kind = ? AND record_id = ?",
+                        (json.dumps(payload, ensure_ascii=False, separators=(',', ':')), measured_at, device_id, kind, record_id),
+                    )
+                    return True
             result = db.execute(
                 "INSERT OR IGNORE INTO records (device_id, kind, record_id, measured_at, payload) VALUES (?, ?, ?, ?, ?)",
                 (device_id, kind, record_id, measured_at, json.dumps(payload, ensure_ascii=False, separators=(',', ':'))),
