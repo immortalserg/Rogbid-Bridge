@@ -1,10 +1,10 @@
-# Rogbid Bridge — Home Assistant integration (development)
+# Watch Bridge — Home Assistant integration
 
-**Status: initial scaffold; not ready for installation.**
+**Status:** Available as a Home Assistant custom integration. Rogbid Z10 is currently supported; Wear OS devices are planned.
 
 The integration connects to the existing Home Assistant MQTT broker, subscribes to `rogbid/<device_id>/state`, and exposes live step, raw calorie and raw distance sensors. The released watch app v0.6.0 publishes only current state. The Android changes in this development branch now also replay up to 500 pulse/SpO₂ measurements, 100 daily step records and 500 archived sleep sessions over MQTT each sync. This is not released or tested on the watch yet.
 
-## Journal protocol (planned)
+## Journal protocol
 
 Publish QoS 1 JSON on `rogbid/<device_id>/history/<kind>`, where `kind` is one of `heart`, `oxygen`, `steps`, `sleep`. Example:
 
@@ -28,7 +28,7 @@ Publish QoS 1 JSON on `rogbid/<device_id>/history/<kind>`, where `kind` is one o
 
 ## First test of the history card (development branch)
 
-Copy the entire `custom_components/rogbid_bridge` directory to `/config/custom_components/rogbid_bridge` in Home Assistant, then restart HA. Add **Rogbid Bridge** under Settings → Devices & services and enter the MQTT device ID used by the watch.
+Copy the entire `custom_components/rogbid_bridge` directory to `/config/custom_components/rogbid_bridge` in Home Assistant, then restart HA. Add **Watch Bridge** under Settings → Devices & services and enter the MQTT device ID used by the watch.
 
 Add a dashboard JavaScript resource with URL:
 
@@ -48,7 +48,7 @@ Replace `king` with the automatically generated immutable ID displayed in the wa
 
 ## Multiple watches and migration
 
-Every installation of the Android app generates a random, persistent ID such as `z10_a81f...<32 hex characters total>`. All MQTT state, measurement, history and Discovery topics use that ID. Add each watch as a separate Rogbid Bridge config entry in HA; the integration stores each watch in its own SQLite journal file.
+Every installation of the Android app generates a random, persistent ID such as `z10_a81f...<32 hex characters total>`. All MQTT state, measurement, history and Discovery topics use that ID. Add each watch as a separate Watch Bridge config entry in HA; the integration stores each watch in its own SQLite journal file.
 
 **Migration warning:** upgrading an existing installation changes the old manually configured MQTT ID (often `king`) to the new generated identity. Old retained MQTT Discovery configs and retained states are not deleted automatically and may leave duplicate/stale entities. Remove old entities and retained configs after verifying the new watch identity. Avoid copying app data between watches, because that copies the persisted ID; a fresh installation must create its own identity. Factory resets or clearing app data will also generate a new identity and require reconfiguring HA.
 
