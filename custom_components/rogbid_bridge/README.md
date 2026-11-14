@@ -22,8 +22,8 @@ Publish QoS 1 JSON on `rogbid/<device_id>/history/<kind>`, where `kind` is one o
 
 1. Verify the Android history export on the watch and the MQTT payloads in HA.
 2. Add cursor/ack synchronization to replace the current bounded full replay and avoid growing MQTT traffic.
-3. Test the initial history WebSocket API and four-tab Lovelace card; implement the sleep-stage chart.
-4. Add correct units and live heart, oxygen and sleep sensors.
+3. Test the initial history WebSocket API, four-tab Lovelace card and sleep-stage timeline on HAOS.
+4. Validate live heart, oxygen and sleep sensors, and prevent duplicate MQTT Discovery entities.
 5. Test on HAOS and publish a HACS-compatible integration release.
 
 ## First test of the history card (development branch)
@@ -44,4 +44,4 @@ device_id: king
 title: Rogbid Z10 history
 ```
 
-Replace `king` with your configured device ID. The four tabs display stored pulse, SpO₂, steps and sleep records. The card currently uses tables, not the planned sleep-stage graph. If no data appears, verify that the updated Android app from this development branch is installed and that the broker receives `rogbid/<device_id>/history/#` messages. **Do not install as a production integration yet.**
+Replace `king` with your configured device ID. The four tabs display stored pulse, SpO₂, steps and sleep records. The card displays journal tables; click a sleep session to view its stage timeline (deep/light/other). If no data appears, verify that the updated Android app from this development branch is installed and that the broker receives `rogbid/<device_id>/history/#` messages. **Do not install as a production integration yet.**
