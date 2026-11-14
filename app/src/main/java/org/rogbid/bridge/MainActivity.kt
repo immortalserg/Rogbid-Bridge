@@ -60,6 +60,11 @@ class MainActivity : Activity() {
   "light" -> Skin(Color.rgb(246, 248, 251), Color.rgb(25, 36, 50), Color.rgb(23, 119, 192), Color.rgb(225, 235, 244))
   "forest" -> Skin(Color.rgb(13, 40, 34), Color.WHITE, Color.rgb(116, 225, 171), Color.rgb(28, 75, 63))
   "sunset" -> Skin(Color.rgb(49, 24, 44), Color.WHITE, Color.rgb(255, 170, 108), Color.rgb(103, 49, 76))
+  "pink" -> Skin(Color.rgb(255, 232, 242), Color.rgb(83, 35, 64), Color.rgb(184, 49, 111), Color.rgb(250, 192, 218))
+  "lavender" -> Skin(Color.rgb(244, 238, 255), Color.rgb(56, 42, 87), Color.rgb(112, 74, 181), Color.rgb(221, 207, 246))
+  "mint" -> Skin(Color.rgb(232, 251, 243), Color.rgb(25, 72, 58), Color.rgb(22, 137, 105), Color.rgb(189, 235, 217))
+  "cream" -> Skin(Color.rgb(255, 249, 232), Color.rgb(78, 59, 35), Color.rgb(164, 104, 40), Color.rgb(246, 226, 187))
+  "sky" -> Skin(Color.rgb(232, 246, 255), Color.rgb(30, 60, 91), Color.rgb(36, 115, 184), Color.rgb(196, 227, 247))
   else -> Skin(Color.rgb(17, 21, 31), Color.WHITE, Color.rgb(105, 187, 255), Color.rgb(42, 51, 69))
  }
  private fun styleButton(button: Button, skin: Skin) {
@@ -834,13 +839,32 @@ class MainActivity : Activity() {
   val user = field("Username", prefs.getString("user", "").orEmpty())
   val pass = field("Password (visible during testing)", prefs.getString("password", "").orEmpty())
   val device = field("Device ID", prefs.getString("device", "king").orEmpty())
-  val skinNames = arrayOf("Dark", "Light", "Forest", "Sunset")
-  val skinKeys = arrayOf("dark", "light", "forest", "sunset")
+  val skinNames = arrayOf("Dark", "Light", "Forest", "Sunset", "Pink", "Lavender", "Mint", "Cream", "Sky")
+  val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   layout.addView(TextView(this).apply {
    text = "Appearance"; textSize = 18f; setTextColor(currentSkin().foreground)
   })
   val skinChoice = Spinner(this)
-  skinChoice.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, skinNames)
+  val spinnerSkin = currentSkin()
+  skinChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, skinNames) {
+   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+    return super.getView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setPadding(12, 8, 12, 8)
+     }
+    }
+   }
+   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+    return super.getDropDownView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setBackgroundColor(spinnerSkin.button)
+      setPadding(16, 12, 16, 12)
+     }
+    }
+   }
+  }
   skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
   layout.addView(skinChoice)
   val autoSync = CheckBox(this).apply {
