@@ -5,6 +5,8 @@ const historyKind = kind => EXTRA_KINDS.includes(kind) ? "steps" : kind;
 const viewForKind = (config,kind) => config?.view_modes?.[kind] || config?.view_mode || "table";
 const TOTAL_KINDS = ["steps","kcal","km"];
 const showTotals = (config,kind) => config?.show_totals?.[kind] === true;
+const monthlyOptions = (config,kind) => config?.monthly_charts?.[kind] || {};
+const showMonthly = (config,kind) => TOTAL_KINDS.includes(kind) && monthlyOptions(config,kind).enabled === true;
 const dailyDate = raw => {
   const match = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -74,13 +76,20 @@ class RogbidHistoryCard extends HTMLElement {
     this._deviceId = config.device_id || previousDevice || null;
     this._devices = this._devices || [];
     this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
-    this._rows = [];
-    this._totalRows = [];
-    this._loading = false;
-    this._error = "";
+    const changed = previousKind !== this._kind || previousDevice !== this._deviceId;
+    const needsTotals = TOTAL_KINDS.includes(this._kind) &&
+      (showTotals(config,this._kind) || showMonthly(config,this._kind));
+    if (changed) {
+      this._requestId = (this._requestId || 0) + 1;
+      this._rows = [];
+      this._totalRows = [];
+      this._loading = false;
+      this._error = "";
+    }
     this._render();
+    // Changing chart settings must fetch the monthly data immediately.
     if (this._hass && this.isConnected && this._deviceId &&
-        (previousKind !== this._kind || (config.device_id && previousDevice !== config.device_id))) {
+        (changed || (needsTotals && !this._totalRows?.length && !this._loading))) {
       this._load();
     }
   }
@@ -133,7 +142,7 @@ class RogbidHistoryCard extends HTMLElement {
         limit: Math.max(1,Math.min(500,Number(this._config.history_limit)||200))
       });
       if (request === this._requestId) this._rows = result.records || [];
-      if (TOTAL_KINDS.includes(kind) && showTotals(this._config,kind)) {
+      if (TOTAL_KINDS.includes(kind) && (showTotals(this._config,kind) || showMonthly(this._config,kind))) {
         // Fetch independently of the chart/table row limit so a year can be summed.
         const totalsResult = await this._hass.callWS({
           type:"rogbid_bridge/history", device_id:this._deviceId, kind:"steps", limit:500
@@ -239,7 +248,10 @@ class RogbidHistoryCard extends HTMLElement {
     }
     if (viewForKind(this._config,this._kind) === "graph") {
       if (TOTAL_KINDS.includes(this._kind) && showTotals(this._config,this._kind)) this._renderTotals(area);
-      this._renderGraph(area); return;
+      if (showMonthly(this._config,this._kind) && monthlyOptions(this._config,this._kind).position !== "after") this._renderMonthly(area);
+      this._renderGraph(area);
+      if (showMonthly(this._config,this._kind) && monthlyOptions(this._config,this._kind).position === "after") this._renderMonthly(area);
+      return;
     }
     const table = document.createElement("table");
     const headings = this._kind === "heart" ? [t("date"), "BPM"] :
@@ -354,6 +366,66 @@ class RogbidHistoryCard extends HTMLElement {
       item.append(value,label);container.append(item);
     });
     area.append(container);
+  }
+
+  _renderMonthly(area) {
+    const options = monthlyOptions(this._config,this._kind);
+    const count = Number(options.months) === 12 ? 12 : 6;
+    const lang = rogbidLang(this._config,this._hass);
+    const now = new Date();
+    const months = Array.from({length:count},(_,i)=>{
+      const offset=count-1-i;
+      const year=now.getFullYear(),month=now.getMonth()-offset;
+      const start=new Date(year,month,1);
+      return {key:start.getFullYear()+"-"+String(start.getMonth()+1).padStart(2,"0"),
+        label:new Intl.DateTimeFormat(lang,{month:"short",year:"2-digit"}).format(start),
+        sum:0,days:0};
+    });
+    const byMonth = new Map(months.map(m=>[m.key,m]));
+    const seen=new Set();
+    for (const record of this._totalRows || []) {
+      const date=dailyDate(record.date);
+      if (!date || date > now || seen.has(record.date)) continue;
+      seen.add(record.date);
+      const key=record.date.slice(0,7), month=byMonth.get(key);
+      if (!month) continue;
+      const value=totalValue(record,this._kind);
+      if (value===null) continue;
+      month.sum+=value;month.days++;
+    }
+    const wrapper=document.createElement("section");
+    wrapper.style.cssText="margin:12px 0 18px";
+    const title=document.createElement("strong");
+    title.textContent=(lang==="ru"?"По месяцам":lang==="fr"?"Par mois":lang==="de"?"Pro Monat":"Monthly totals")+
+      " · "+(this._kind==="steps"?rogbidT(this._config,this._hass,"steps"):this._kind);
+    wrapper.append(title);
+    const ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");
+    svg.setAttribute("viewBox","0 0 600 260");svg.classList.add("history-chart");
+    svg.setAttribute("role","img");svg.setAttribute("aria-label",title.textContent);
+    const make=(tag,attrs,parent=svg)=>{
+      const el=document.createElementNS(ns,tag);
+      Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,String(v)));
+      parent.append(el);return el;
+    };
+    const max=Math.max(1,...months.map(m=>m.sum));
+    make("line",{x1:48,y1:218,x2:590,y2:218,stroke:"currentColor"});
+    const formatter=new Intl.NumberFormat(lang,{maximumFractionDigits:this._kind==="km"?1:0});
+    months.forEach((m,i)=>{
+      const slot=540/count,x=50+i*slot+slot*0.15,width=slot*0.7;
+      const height=178*m.sum/max;
+      const bar=make("rect",{x,y:218-height,width,height,rx:2,fill:"var(--primary-color)"});
+      const tooltip=make("title",{},bar);
+      tooltip.textContent=m.label+": "+(m.days?formatter.format(m.sum):"—")+" ("+m.days+" days)";
+      if (options.show_values === true && m.days) {
+        const valueLabel=make("text",{x:x+width/2,y:Math.max(18,213-height),
+          "text-anchor":"middle",fill:"currentColor","font-size":count===12?10:12});
+        valueLabel.textContent=formatter.format(m.sum);
+      }
+      const label=make("text",{x:x+width/2,y:239,"text-anchor":"middle",fill:"currentColor","font-size":count===12?10:12});
+      label.textContent=m.label;
+    });
+    wrapper.append(svg);
+    area.append(wrapper);
   }
 
   _renderGraph(area) {
@@ -588,6 +660,34 @@ class RogbidHistoryCardEditor extends HTMLElement {
       label.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0";
       label.append(toggle,document.createTextNode("∑ "+(kind==="steps"?t("steps"):kind)+" (7 / 30 / 365)"));
       this.append(label);
+    }
+    const monthlyTitle=document.createElement("div");
+    monthlyTitle.textContent=(rogbidLang(this._config,this._hass)==="ru"?"Месячные графики":"Monthly charts");
+    monthlyTitle.style.marginTop="12px";this.append(monthlyTitle);
+    for(const kind of TOTAL_KINDS) {
+      const options=monthlyOptions(this._config,kind);
+      const row=document.createElement("div");
+      row.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0";
+      const toggle=document.createElement("input");toggle.type="checkbox";toggle.checked=options.enabled===true;
+      const name=document.createElement("span");name.textContent=kind==="steps"?t("steps"):kind;
+      const months=document.createElement("select");
+      for(const value of [6,12]) {const option=document.createElement("option");option.value=String(value);option.textContent=String(value)+" "+(rogbidLang(this._config,this._hass)==="ru"?"месяцев":"months");months.append(option);}
+      months.value=String(options.months===12?12:6);
+      const position=document.createElement("select");
+      for(const [value,label] of [["before",rogbidLang(this._config,this._hass)==="ru"?"Перед графиком":"Before chart"],["after",rogbidLang(this._config,this._hass)==="ru"?"После графика":"After chart"]]) {
+        const option=document.createElement("option");option.value=value;option.textContent=label;position.append(option);
+      }
+      position.value=options.position==="after"?"after":"before";
+      const values=document.createElement("input");values.type="checkbox";
+      values.checked=options.show_values===true;
+      const valuesLabel=document.createElement("label");
+      valuesLabel.style.cssText="display:flex;gap:4px;align-items:center";
+      valuesLabel.append(values,document.createTextNode(
+        rogbidLang(this._config,this._hass)==="ru"?"Показывать значения":"Show values"));
+      const save=()=>this._update("monthly_charts",{...(this._config.monthly_charts||{}),
+        [kind]:{enabled:toggle.checked,months:Number(months.value),position:position.value,show_values:values.checked}});
+      toggle.addEventListener("change",save);months.addEventListener("change",save);position.addEventListener("change",save);values.addEventListener("change",save);
+      row.append(toggle,name,months,position,valuesLabel);this.append(row);
     }
     const modeTitle=document.createElement("div");
     modeTitle.textContent=t("display");modeTitle.style.marginTop="12px";this.append(modeTitle);
