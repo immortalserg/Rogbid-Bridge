@@ -76,13 +76,20 @@ class RogbidHistoryCard extends HTMLElement {
     this._deviceId = config.device_id || previousDevice || null;
     this._devices = this._devices || [];
     this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
-    this._rows = [];
-    this._totalRows = [];
-    this._loading = false;
-    this._error = "";
+    const changed = previousKind !== this._kind || previousDevice !== this._deviceId;
+    const needsTotals = TOTAL_KINDS.includes(this._kind) &&
+      (showTotals(config,this._kind) || showMonthly(config,this._kind));
+    if (changed) {
+      this._requestId = (this._requestId || 0) + 1;
+      this._rows = [];
+      this._totalRows = [];
+      this._loading = false;
+      this._error = "";
+    }
     this._render();
+    // Changing chart settings must fetch the monthly data immediately.
     if (this._hass && this.isConnected && this._deviceId &&
-        (previousKind !== this._kind || (config.device_id && previousDevice !== config.device_id))) {
+        (changed || (needsTotals && !this._totalRows?.length && !this._loading))) {
       this._load();
     }
   }
