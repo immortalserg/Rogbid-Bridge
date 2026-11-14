@@ -1,0 +1,31 @@
+name: Home Assistant integration checks
+on:
+  push:
+    paths:
+      - 'custom_components/rogbid_bridge/**'
+      - 'tests/test_rogbid_storage.py'
+      - '.github/workflows/home-assistant.yml'
+  pull_request:
+    paths:
+      - 'custom_components/rogbid_bridge/**'
+      - 'tests/test_rogbid_storage.py'
+      - '.github/workflows/home-assistant.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Python syntax
+        run: python -m compileall -q custom_components/rogbid_bridge
+      - name: Test journal isolation, deduplication and updates
+        run: python -m unittest discover -s tests -p 'test_rogbid_storage.py' -v
+      - name: Check card JavaScript syntax
+        run: node --check custom_components/rogbid_bridge/rogbid-history-card.js
