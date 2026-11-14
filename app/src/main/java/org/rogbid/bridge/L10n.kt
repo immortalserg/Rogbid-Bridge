@@ -429,7 +429,8 @@ object L10n {
    "tap_read" to "Tap Read source",
    "reading" to "Reading...",
    "read_first" to "Read source first",
-   "copied" to "Snapshot copied"
+   "copied" to "Snapshot copied",
+   "sync_notification" to "MQTT and sleep sync active"
   ),
   "ru" to mapOf(
    "configure_mqtt" to "Настройте MQTT в параметрах",
@@ -453,7 +454,8 @@ object L10n {
    "tap_read" to "Нажмите «Прочитать источник»",
    "reading" to "Чтение...",
    "read_first" to "Сначала прочитайте источник",
-   "copied" to "Снимок скопирован"
+   "copied" to "Снимок скопирован",
+   "sync_notification" to "Синхронизация MQTT и сна активна"
   ),
   "fr" to mapOf(
    "configure_mqtt" to "Configurez MQTT dans les paramètres",
@@ -477,7 +479,8 @@ object L10n {
    "tap_read" to "Appuyez sur Lire la source",
    "reading" to "Lecture...",
    "read_first" to "Lisez d’abord la source",
-   "copied" to "Données copiées"
+   "copied" to "Données copiées",
+   "sync_notification" to "Synchronisation MQTT et sommeil active"
   ),
   "de" to mapOf(
    "configure_mqtt" to "MQTT in den Einstellungen konfigurieren",
@@ -501,7 +504,8 @@ object L10n {
    "tap_read" to "Quelle lesen antippen",
    "reading" to "Wird gelesen...",
    "read_first" to "Zuerst Quelle lesen",
-   "copied" to "Daten kopiert"
+   "copied" to "Daten kopiert",
+   "sync_notification" to "MQTT- und Schlafsynchronisierung aktiv"
   ),
   "lb" to mapOf(
    "configure_mqtt" to "MQTT an den Astellunge konfiguréieren",
@@ -525,7 +529,8 @@ object L10n {
    "tap_read" to "Op Quell liesen tippen",
    "reading" to "Gëtt gelies...",
    "read_first" to "Als éischt d'Quell liesen",
-   "copied" to "Donnéeë kopéiert"
+   "copied" to "Donnéeë kopéiert",
+   "sync_notification" to "MQTT- a Schlofsynchroniséierung aktiv"
   ),
   "it" to mapOf(
    "configure_mqtt" to "Configura MQTT nelle impostazioni",
@@ -549,7 +554,8 @@ object L10n {
    "tap_read" to "Tocca Leggi fonte",
    "reading" to "Lettura...",
    "read_first" to "Leggi prima la fonte",
-   "copied" to "Dati copiati"
+   "copied" to "Dati copiati",
+   "sync_notification" to "Sincronizzazione MQTT e sonno attiva"
   ),
   "pt" to mapOf(
    "configure_mqtt" to "Configure o MQTT nas definições",
@@ -573,7 +579,8 @@ object L10n {
    "tap_read" to "Toque em Ler fonte",
    "reading" to "A ler...",
    "read_first" to "Leia primeiro a fonte",
-   "copied" to "Dados copiados"
+   "copied" to "Dados copiados",
+   "sync_notification" to "Sincronização MQTT e sono ativa"
   ),
   "es" to mapOf(
    "configure_mqtt" to "Configura MQTT en Ajustes",
@@ -597,7 +604,8 @@ object L10n {
    "tap_read" to "Pulsa Leer fuente",
    "reading" to "Leyendo...",
    "read_first" to "Lee primero la fuente",
-   "copied" to "Datos copiados"
+   "copied" to "Datos copiados",
+   "sync_notification" to "Sincronización MQTT y sueño activa"
   )
  )
  fun text(key: String): String {
