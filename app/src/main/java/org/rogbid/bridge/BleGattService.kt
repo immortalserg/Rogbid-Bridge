@@ -20,7 +20,7 @@ import org.json.JSONObject
 
 /**
  * BLE transport: discoverable GATT endpoint with device identity handshake.
- * Does NOT send health records. The sync protocol will be implemented separately.
+ * Supports identity and bounded, cursor-based heart history reads.
  */
 class BleGattService : Service() {
  companion object {
@@ -54,7 +54,30 @@ class BleGattService : Service() {
    if (characteristic.uuid.toString() == REQUEST_ID && !preparedWrite && offset == 0 && value.size <= 256) {
     try {
      val request = JSONObject(String(value, Charsets.UTF_8))
-     if (request.optString("type") == "device_info") {
+     if (request.optString("type") == "heart_history") {
+      val after = request.optLong("after_id", 0L).coerceAtLeast(0L)
+      val helper = object : android.database.sqlite.SQLiteOpenHelper(this@BleGattService, "measurements.db", null, 1) {
+       override fun onCreate(db: android.database.sqlite.SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS measurements (id INTEGER PRIMARY KEY AUTOINCREMENT, measured_at TEXT NOT NULL, sensor_type INTEGER NOT NULL, heart_rate INTEGER, spo2 INTEGER)")
+       }
+       override fun onUpgrade(db: android.database.sqlite.SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+      }
+      try {
+       val page = JSONObject().put("type", "heart_history").put("after_id", after)
+       helper.readableDatabase.rawQuery(
+        "SELECT id, measured_at, heart_rate FROM measurements WHERE sensor_type=21 AND id>? AND heart_rate IS NOT NULL ORDER BY id ASC LIMIT 1",
+        arrayOf(after.toString())
+       ).use { cursor ->
+        if (cursor.moveToFirst()) {
+         page.put("record", JSONObject().put("id", cursor.getLong(0))
+          .put("measured_at", cursor.getString(1)).put("heart_rate", cursor.getInt(2)))
+        } else page.put("done", true)
+       }
+       synchronized(this@BleGattService) { response = page.toString() }
+       status = BluetoothGatt.GATT_SUCCESS
+       Log.i(TAG, "GATT heart_history after_id=$after")
+      } finally { helper.close() }
+     } else if (request.optString("type") == "device_info") {
       val id = WatchIdentity.id(this@BleGattService).trim()
       if (id.isNotEmpty()) {
        synchronized(this@BleGattService) {
