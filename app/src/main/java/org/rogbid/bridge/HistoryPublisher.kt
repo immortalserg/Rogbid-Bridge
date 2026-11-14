@@ -66,6 +66,7 @@ object HistoryPublisher {
    var count = 0
    while (cursor.moveToNext() && count++ < 100) {
     val date = cursor.getString(dateIndex) ?: continue
+    if (context.getSharedPreferences("hidden_steps", Context.MODE_PRIVATE).getBoolean(date, false)) continue
     val day = try { LocalDate.parse(date.take(10)) } catch (_: Exception) { continue }
     val record = JSONObject()
      .put("kind", "steps")
