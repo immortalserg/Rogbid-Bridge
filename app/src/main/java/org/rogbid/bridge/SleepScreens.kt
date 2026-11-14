@@ -4,6 +4,7 @@ import android.app.Activity
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.Gravity
@@ -24,6 +25,11 @@ class SleepScreens(
  private val onHome: () -> Unit
 ) {
  private val density = activity.resources.displayMetrics.density
+ private companion object {
+  val DEEP_COLOR = Color.rgb(45, 95, 210)
+  val LIGHT_COLOR = Color.rgb(50, 190, 185)
+  val AWAKE_COLOR = Color.GRAY
+ }
  private fun dp(value: Int): Int = (value * density).toInt()
  private fun page(title: String): LinearLayout {
   val root = LinearLayout(activity).apply {
@@ -95,31 +101,49 @@ class SleepScreens(
  private fun wakeCount(raw: String): String {
   // The vendor's known types are deep=1, light=2 and session end=3.
   // Type 3 is NOT evidence of an awakening; do not invent counts.
-  return "нет данных"
+  return "—"
+ }
+
+ private fun metricRow(root: LinearLayout, title: String, value: String, swatch: Int? = null) {
+  val row = LinearLayout(activity).apply {
+   orientation = LinearLayout.HORIZONTAL
+   gravity = Gravity.CENTER_VERTICAL
+  }
+  row.addView(label("$title: $value", 17f).apply {
+   setTypeface(null, Typeface.BOLD)
+  })
+  if (swatch != null) {
+   row.addView(View(activity).apply {
+    background = GradientDrawable().apply {
+     setColor(swatch)
+     cornerRadius = dp(2).toFloat()
+    }
+    layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
+     leftMargin = dp(8)
+    }
+   })
+  }
+  root.addView(row)
  }
 
  private fun details(record: JSONObject, fromHistory: Boolean) {
-  val root = page("Сон — " + record.optString("sleep_date"))
-  root.addView(label(
-   "Всего: " + duration(record.optInt("duration_minutes")) +
-   "\nГлубокий: " + duration(record.optInt("deep_minutes")) +
-   "\nЛёгкий: " + duration(record.optInt("light_minutes")) +
-   "\nПробуждения: нет данных" +
-   "\n" + record.optString("start_time") + " — " + record.optString("end_time")
-  ))
-  root.addView(label("График фаз сна", 17f))
+  val interval = record.optString("start_time") + "–" + record.optString("end_time")
+  val root = page("Сон — " + record.optString("sleep_date") + " — " + interval)
+  metricRow(root, "Всего", duration(record.optInt("duration_minutes")))
+  metricRow(root, "Глубокий", duration(record.optInt("deep_minutes")), DEEP_COLOR)
+  metricRow(root, "Лёгкий", duration(record.optInt("light_minutes")), LIGHT_COLOR)
+  metricRow(root, "Пробуждения", "—", AWAKE_COLOR)
   val stages = try { JSONArray(record.optString("stages_json")) } catch (_: Exception) { JSONArray() }
-  root.addView(SleepGraph(activity, stages, foreground, accent).apply {
+  root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(180))
   })
-  root.addView(label("Глубокий — синий  •  Лёгкий — бирюзовый", 12f))
   root.addView(button("Посмотреть историю") { history() })
   root.addView(button("Назад") { if (fromHistory) history() else onHome() })
  }
 
  private class SleepGraph(
   context: Activity, private val stages: JSONArray,
-  private val textColor: Int, private val accent: Int
+  private val textColor: Int
  ) : View(context) {
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
   private fun minute(clock: String): Int? {
@@ -161,14 +185,13 @@ class SleepScreens(
     val next = timeline[i + 1].first
     if (next <= t) continue
     paint.color = when (kind) {
-     1 -> Color.rgb(45, 95, 210)
-     2 -> Color.rgb(50, 190, 185)
-     else -> Color.GRAY
+     1 -> DEEP_COLOR
+     2 -> LIGHT_COLOR
+     else -> AWAKE_COLOR
     }
     val x1 = left + (right - left) * (t - start).toFloat() / (end - start)
     val x2 = left + (right - left) * (next - start).toFloat() / (end - start)
-    val y1 = if (kind == 1) top + (bottom - top) * 0.48f else top
-    canvas.drawRect(x1, y1, x2.coerceAtMost(right), bottom, paint)
+    canvas.drawRect(x1, top + (bottom - top) * 0.48f, x2.coerceAtMost(right), bottom, paint)
    }
    paint.color = textColor
    canvas.drawText(stages.optJSONObject(0)?.optString("time") ?: "", left, height - 7f, paint)
