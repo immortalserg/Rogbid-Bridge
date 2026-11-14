@@ -702,15 +702,17 @@ class MainActivity : Activity() {
       }
      }
     } else if (kind == "steps") {
-     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
-      arrayOf("date", "steps"), null, null, "date DESC")?.use { cursor ->
-      val date = cursor.getColumnIndex("date")
-      val steps = cursor.getColumnIndex("steps")
-      if (date >= 0 && steps >= 0) while (cursor.moveToNext() && records.size < 100) {
-       records.add(cursor.getString(date) + "    " + cursor.getLong(steps) + " steps")
+      contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+       arrayOf("date", "steps", "kcal", "diatance"), null, null, "date DESC")?.use { cursor ->
+       fun value(name: String): String {
+        val index = cursor.getColumnIndex(name)
+        return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
+       }
+       while (cursor.moveToNext() && records.size < 100) {
+        records.add("${value("date")} — ${value("steps")} шагов — ${value("kcal")} ккал — ${value("diatance")} расстояние")
+       }
       }
-     }
-    } else {
+     } else {
      contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
       null, null, null, "_id DESC")?.use { cursor ->
       fun value(name: String): String? {
@@ -883,15 +885,4 @@ class MainActivity : Activity() {
  }
  override fun onBackPressed() { showHome() }
  override fun onDestroy() { stopMeasurement(); super.onDestroy() }
-}     } else if (kind == "steps") {
-      contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
-       arrayOf("date", "steps", "kcal", "diatance"), null, null, "date DESC")?.use { cursor ->
-       fun value(name: String): String {
-        val index = cursor.getColumnIndex(name)
-        return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
-       }
-       while (cursor.moveToNext() && records.size < 100) {
-        records.add("${value("date")} — ${value("steps")} шагов — ${value("kcal")} ккал — ${value("diatance")} расстояние")
-       }
-      }
-
+}
