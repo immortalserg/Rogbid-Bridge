@@ -1,7 +1,7 @@
 {
   "domain": "rogbid_bridge",
   "name": "Rogbid Bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "documentation": "https://github.com/immortalserg/Rogbid-Bridge",
   "issue_tracker": "https://github.com/immortalserg/Rogbid-Bridge/issues",
   "codeowners": [
