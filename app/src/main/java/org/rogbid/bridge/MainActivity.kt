@@ -641,19 +641,19 @@ class MainActivity : Activity() {
   back.setOnClickListener { showHome() }
   show(layout)
   Thread {
-   val records = mutableListOf<String>()
+   val records = mutableListOf<Pair<String, String?>>()
    try {
     if (kind == "heart" || kind == "oxygen") {
      val type = if (kind == "heart") 21 else 31
      measurementDb.readableDatabase.rawQuery(
-      "SELECT measured_at, heart_rate, spo2 FROM measurements WHERE sensor_type = ? ORDER BY id DESC LIMIT 100",
+      "SELECT id, measured_at, heart_rate, spo2 FROM measurements WHERE sensor_type = ? ORDER BY id DESC LIMIT 100",
       arrayOf(type.toString())
      ).use { cursor ->
       while (cursor.moveToNext()) {
-       val time = cursor.getString(0).replace("T", " ").take(19)
-       val reading = if (type == 21) cursor.getInt(1).toString() + " bpm"
-        else cursor.getInt(2).toString() + " %"
-       records.add("$time    $reading")
+       val time = cursor.getString(1).replace("T", " ").take(19)
+       val reading = if (type == 21) cursor.getInt(2).toString() + " bpm"
+        else cursor.getInt(3).toString() + " %"
+       records.add(Pair("$time    $reading", "measurement:" + cursor.getLong(0)))
       }
      }
     } else if (kind == "steps") {
@@ -664,6 +664,7 @@ class MainActivity : Activity() {
         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
        }
        while (cursor.moveToNext() && records.size < 100) {
+        if (getSharedPreferences("hidden_steps", MODE_PRIVATE).getBoolean(value("date"), false)) continue
         // Vendor "kcal" values are calories; "diatance" values are metres.
         val calories = value("kcal").replace(',', '.').toDoubleOrNull()
         val distanceMetres = value("diatance").replace(',', '.').toDoubleOrNull()
@@ -671,7 +672,7 @@ class MainActivity : Activity() {
          ?.let { kotlin.math.round(it / 1000.0).toLong().toString() } ?: "—"
         val kilometres = distanceMetres?.takeIf { it.isFinite() && it >= 0.0 }
          ?.let { String.format(java.util.Locale.getDefault(), "%.1f", it / 1000.0) } ?: "—"
-        records.add("${value("date")} — ${value("steps")} ${L10n.text("steps")} — $kilocalories ${L10n.text("calories")} — $kilometres km")
+        records.add(Pair("${value("date")} — ${value("steps")} ${L10n.text("steps")} — $kilocalories ${L10n.text("calories")} — $kilometres km", "steps:" + value("date")))
        }
       }
      } else {
@@ -685,20 +686,44 @@ class MainActivity : Activity() {
        val hh = value("sumHH")?.toIntOrNull()
        val mm = value("sumMM")?.toIntOrNull()
        val duration = if (hh != null && mm != null) "${hh}${L10n.text("hours")} ${mm}${L10n.text("minutes")}" else "—"
-       records.add((value("sleeptime") ?: value("_id") ?: L10n.text("sleep")) + "    " + duration)
+       records.add(Pair((value("sleeptime") ?: value("_id") ?: L10n.text("sleep")) + "    " + duration, null))
       }
      }
     }
    } catch (e: Exception) {
-    records.add(L10n.text("history_unavailable") + e.message)
+    records.add(Pair(L10n.text("history_unavailable") + e.message, null))
    }
    runOnUiThread {
-    if (records.isEmpty()) records.add(L10n.text("no_history"))
-    for (record in records) entries.addView(TextView(this).apply {
-     text = record; textSize = 16f
-     setTextColor(skin.foreground)
-     setPadding(0, 10, 0, 10)
-    })
+    if (records.isEmpty()) records.add(Pair(L10n.text("no_history"), null))
+    for ((label, key) in records) {
+     val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+     row.addView(TextView(this).apply {
+      text = label; textSize = 14f; setTextColor(skin.foreground)
+      layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+      setPadding(0, 10, 0, 10)
+     })
+     if (key != null) {
+      val delete = Button(this).apply { text = "🗑" }
+      styleButton(delete, skin)
+      delete.setOnClickListener {
+       android.app.AlertDialog.Builder(this)
+        .setTitle("Delete record?")
+        .setMessage("Remove this record from the watch app only. Home Assistant history is kept.")
+        .setNegativeButton(android.R.string.cancel, null)
+        .setPositiveButton("Delete") { _, _ ->
+         if (key.startsWith("measurement:")) {
+          measurementDb.writableDatabase.delete("measurements", "id=?", arrayOf(key.substringAfter(":")))
+         } else if (key.startsWith("steps:")) {
+          getSharedPreferences("hidden_steps", MODE_PRIVATE).edit()
+           .putBoolean(key.substringAfter(":"), true).apply()
+         }
+         showJournal(kind)
+        }.show()
+      }
+      row.addView(delete)
+     }
+     entries.addView(row)
+    }
    }
   }.start()
  }
