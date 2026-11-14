@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [main, feature/automatic-sleep-sync]
+    branches: [main, feature/automatic-sleep-sync, feature/home-assistant-integration]
   pull_request:
   workflow_dispatch:
 jobs:
