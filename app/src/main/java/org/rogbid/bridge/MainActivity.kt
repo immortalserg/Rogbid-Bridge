@@ -679,10 +679,10 @@ class MainActivity : Activity() {
    diagnostic.setOnClickListener { showSleepDiagnostics() }
   }
   val entries = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-  layout.addView(entries)
   val back = Button(this).apply { text = "Back" }
   styleButton(back, skin)
   layout.addView(back)
+  layout.addView(entries)
   back.setOnClickListener { showHome() }
   show(layout)
   Thread {
