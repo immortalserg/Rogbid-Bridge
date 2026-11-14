@@ -56,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _register_lovelace_resource(hass)
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
-    gatt_diagnostics = GattDiagnostics(hass, device_id)
+    gatt_diagnostics = GattDiagnostics(hass, device_id, journal)
     entry.async_on_unload(gatt_diagnostics.close)
 
     # Diagnostic-only: advertisements are forwarded by ESPHome Bluetooth Proxy.

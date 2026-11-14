@@ -30,6 +30,50 @@ class Journal:
                 PRIMARY KEY (device_id, kind, record_id)
             )""")
 
+    def get_sync_cursor(self, device_id: str, kind: str) -> int:
+        """Last durably processed source record ID for a BLE history stream."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sync_cursors (
+                device_id TEXT NOT NULL, kind TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device_id, kind)
+            )""")
+            row = db.execute(
+                "SELECT last_id FROM sync_cursors WHERE device_id=? AND kind=?",
+                (device_id, kind),
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+    def save_sync_cursor(self, device_id: str, kind: str, last_id: int) -> None:
+        """Advance cursor monotonically only after the record is persisted."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sync_cursors (
+                device_id TEXT NOT NULL, kind TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device_id, kind)
+            )""")
+            db.execute(
+                """INSERT INTO sync_cursors (device_id, kind, last_id) VALUES (?, ?, ?)
+                ON CONFLICT(device_id, kind) DO UPDATE SET last_id=MAX(last_id, excluded.last_id)""",
+                (device_id, kind, last_id),
+            )
+
+    def get_steps_cursor(self, device_id: str) -> str:
+        """Return previous completed date; replay latest day for changing totals."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS steps_sync (
+                device_id TEXT PRIMARY KEY, last_date TEXT NOT NULL
+            )""")
+            row = db.execute("SELECT last_date FROM steps_sync WHERE device_id=?", (device_id,)).fetchone()
+            return row[0] if row else ""
+
+    def save_steps_cursor(self, device_id: str, date: str) -> None:
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS steps_sync (
+                device_id TEXT PRIMARY KEY, last_date TEXT NOT NULL
+            )""")
+            db.execute("""INSERT INTO steps_sync (device_id, last_date) VALUES (?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET last_date=MAX(last_date, excluded.last_date)""",
+                (device_id, date))
+
     def insert(self, device_id: str, kind: str, record_id: str, measured_at: str, payload: dict) -> bool:
         with sqlite3.connect(self.path) as db:
             if db.execute(

@@ -1,0 +1,111 @@
+name: Publish Watch Bridge release
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'custom_components/rogbid_bridge/manifest.json'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Read release versions
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          HA_VERSION="$(python3 -c 'import json; print(json.load(open("custom_components/rogbid_bridge/manifest.json"))["version"])')"
+          ANDROID_VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)"
+          test -n "$HA_VERSION" && test -n "$ANDROID_VERSION"
+          echo "ha=$HA_VERSION" >> "$GITHUB_OUTPUT"
+          echo "android=$ANDROID_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$HA_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Check if already released
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Configure Android SDK
+        if: steps.existing.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -path '*/bin/sdkmanager' -type f -print -quit)"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare signing key
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ROGBID_KEYSTORE_BASE64 }}
+          ROGBID_KEYSTORE_PASSWORD: ${{ secrets.ROGBID_KEYSTORE_PASSWORD }}
+          ROGBID_KEY_ALIAS: ${{ secrets.ROGBID_KEY_ALIAS }}
+          ROGBID_KEY_PASSWORD: ${{ secrets.ROGBID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" && test -n "$ROGBID_KEYSTORE_PASSWORD" && test -n "$ROGBID_KEY_ALIAS" && test -n "$ROGBID_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rogbid-release.jks"
+          echo "ROGBID_KEYSTORE_PATH=$RUNNER_TEMP/rogbid-release.jks" >> "$GITHUB_ENV"
+      - name: Build signed APK
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          ROGBID_KEYSTORE_PASSWORD: ${{ secrets.ROGBID_KEYSTORE_PASSWORD }}
+          ROGBID_KEY_ALIAS: ${{ secrets.ROGBID_KEY_ALIAS }}
+          ROGBID_KEY_PASSWORD: ${{ secrets.ROGBID_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+      - name: Delete signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/rogbid-release.jks"
+      - name: Package release assets
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          ANDROID_VERSION: ${{ steps.version.outputs.android }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/Watch-Bridge-Android-$ANDROID_VERSION.apk"
+          cd custom_components
+          zip -r "../dist/rogbid_bridge.zip" rogbid_bridge -x '*/__pycache__/*' '*.pyc'
+      - name: Publish GitHub release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          HA_VERSION: ${{ steps.version.outputs.ha }}
+          ANDROID_VERSION: ${{ steps.version.outputs.android }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          ## Watch Bridge
+          - Home Assistant integration: **$HA_VERSION**
+          - Android watch application: **$ANDROID_VERSION** (signed APK attached)
+          - BLE GATT incremental synchronization: heart rate, SpO2, steps and sleep
+          - Durable per-stream cursors and deduplication alongside MQTT
+          - Sleep history chunking for BLE MTU limits
+          - Redesigned settings: MQTT, Home Assistant, Bluetooth and application
+          - Larger, consistently themed buttons and spacing
+          EOF
+          gh release create "$TAG" dist/* --title "Watch Bridge $TAG" --notes-file release-notes.md --target "$GITHUB_SHA"
