@@ -1,0 +1,31 @@
+name: Publish Watch Bridge v0.7.9
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-watch-bridge-079.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify integration version and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          with open("custom_components/rogbid_bridge/manifest.json", encoding="utf-8") as f:
+              version = json.load(f)["version"]
+          assert version == "0.7.9", f"Expected 0.7.9, got {version}"
+          PY
+          if gh release view v0.7.9 >/dev/null 2>&1; then
+            echo "Release v0.7.9 already exists; leaving unchanged"
+            exit 0
+          fi
+          gh release create v0.7.9 --target "$GITHUB_SHA" --title "Watch Bridge v0.7.9" --notes "Home Assistant Watch Bridge integration v0.7.9. Adds Bluetooth advertisement discovery diagnostics for Rogbid Z10 via Home Assistant Bluetooth and ESPHome Bluetooth Proxy. BLE GATT data synchronization is not yet implemented; MQTT functionality remains available. This release does not contain a new Android APK."
