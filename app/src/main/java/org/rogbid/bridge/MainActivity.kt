@@ -395,10 +395,10 @@ class MainActivity : Activity() {
   }
   val summaryRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val summaryRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val heartCell = tile("♥", "Pulse")
-  val oxygenCell = tile("O₂", "Oxygen")
-  val stepsCell = tile("♟", "Steps")
-  val sleepCell = tile("☾", "Sleep")
+  val heartCell = tile("♥", L10n.text("pulse"))
+  val oxygenCell = tile("O₂", L10n.text("oxygen"))
+  val stepsCell = tile("♟", L10n.text("steps"))
+  val sleepCell = tile("☾", L10n.text("sleep"))
   for ((row, pair) in listOf(
    Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
    Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
@@ -421,9 +421,9 @@ class MainActivity : Activity() {
   measureOxygenButton = oxygenButton
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
-  val button = Button(this).apply { text = "Send data" }
-  val history = Button(this).apply { text = "Send history" }
-  val settings = Button(this).apply { text = "Settings" }
+  val button = Button(this).apply { text = L10n.text("send_data") }
+  val history = Button(this).apply { text = L10n.text("send_history") }
+  val settings = Button(this).apply { text = L10n.text("settings") }
   val status = TextView(this)
   val lower = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val lower2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -619,7 +619,7 @@ class MainActivity : Activity() {
          isRetained = true
         })
       }
-      discovery("steps", "Steps", "steps", null, "measurement")
+      discovery("steps", L10n.text("steps"), "steps", null, "measurement")
       // Direct measurements manage heart rate and SpO2 MQTT discovery.
       discovery("last_update", "Last Update", null, "timestamp", null)
       discovery("sleep_duration", "Sleep Duration", "min", "duration", "measurement")
@@ -665,10 +665,10 @@ class MainActivity : Activity() {
   val skin = currentSkin()
   val layout = page()
   val title = when (kind) {
-   "heart" -> "♥ Pulse history"
-   "oxygen" -> "O₂ Oxygen history"
-   "steps" -> "♟ Steps history"
-   else -> "☾ Sleep history"
+   "heart" -> L10n.text("pulse_history")
+   "oxygen" -> L10n.text("oxygen_history")
+   "steps" -> L10n.text("steps_history")
+   else -> L10n.text("sleep_history")
   }
   layout.addView(TextView(this).apply {
    text = title; textSize = 22f; setTextColor(skin.foreground)
@@ -678,13 +678,13 @@ class MainActivity : Activity() {
    return
   }
   if (kind == "sleep-diagnostics") {
-   val diagnostic = Button(this).apply { text = "Diagnose sleep source" }
+   val diagnostic = Button(this).apply { text = L10n.text("diagnose") }
    styleButton(diagnostic, skin)
    layout.addView(diagnostic)
    diagnostic.setOnClickListener { showSleepDiagnostics() }
   }
   val entries = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-  val back = Button(this).apply { text = "Back" }
+  val back = Button(this).apply { text = L10n.text("back") }
   styleButton(back, skin)
   layout.addView(back)
   layout.addView(entries)
@@ -714,7 +714,7 @@ class MainActivity : Activity() {
         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
        }
        while (cursor.moveToNext() && records.size < 100) {
-        records.add("${value("date")} — ${value("steps")} шагов — ${value("kcal")} ккал — ${value("diatance")} расстояние")
+        records.add("${value("date")} — ${value("steps")} ${L10n.text("steps")} — ${value("kcal")} ${L10n.text("calories")} — ${value("diatance")} ${L10n.text("distance")}")
        }
       }
      } else {
@@ -728,7 +728,7 @@ class MainActivity : Activity() {
        val hh = value("sumHH")?.toIntOrNull()
        val mm = value("sumMM")?.toIntOrNull()
        val duration = if (hh != null && mm != null) "${hh}h ${mm}m" else "—"
-       records.add((value("sleeptime") ?: value("_id") ?: "Sleep") + "    " + duration)
+       records.add((value("sleeptime") ?: value("_id") ?: L10n.text("sleep")) + "    " + duration)
       }
      }
     }
@@ -749,7 +749,7 @@ class MainActivity : Activity() {
   val skin = currentSkin()
   val layout = page()
   layout.addView(TextView(this).apply {
-   text = "Sleep source diagnostics"; textSize = 21f; setTextColor(skin.foreground)
+   text = L10n.text("sleep_diagnostics"); textSize = 21f; setTextColor(skin.foreground)
   })
   val hint = TextView(this).apply {
    text = "Capture before and after opening the stock Sleep app. Compare IDs, times and all fields."
@@ -760,9 +760,9 @@ class MainActivity : Activity() {
    text = "Tap Read source"; textSize = 13f; setTextColor(skin.foreground)
    setTextIsSelectable(true)
   }
-  val read = Button(this).apply { text = "Read source" }
-  val copy = Button(this).apply { text = "Copy snapshot" }
-  val back = Button(this).apply { text = "Back" }
+  val read = Button(this).apply { text = L10n.text("read_source") }
+  val copy = Button(this).apply { text = L10n.text("copy_snapshot") }
+  val back = Button(this).apply { text = L10n.text("back") }
   for (button in arrayOf(read, copy, back)) {
    styleButton(button, skin)
    layout.addView(button)
@@ -823,7 +823,7 @@ class MainActivity : Activity() {
  }
  private fun showSettings() {
   val layout = page()
-  layout.addView(TextView(this).apply { text = "Settings"; textSize = 22f; setTextColor(currentSkin().foreground) })
+  layout.addView(TextView(this).apply { text = L10n.text("settings"); textSize = 22f; setTextColor(currentSkin().foreground) })
   fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText =
    EditText(this).apply {
     hint = label
@@ -834,15 +834,15 @@ class MainActivity : Activity() {
     setSingleLine(true)
     layout.addView(this)
    }
-  val host = field("Broker IP / hostname", prefs.getString("host", "").orEmpty())
-  val port = field("Port", prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
-  val user = field("Username", prefs.getString("user", "").orEmpty())
-  val pass = field("Password (visible during testing)", prefs.getString("password", "").orEmpty())
-  val device = field("Device ID", prefs.getString("device", "king").orEmpty())
-  val skinNames = arrayOf("Dark", "Light", "Forest", "Sunset", "Pink", "Lavender", "Mint", "Cream", "Sky")
+  val host = field(L10n.text("host"), prefs.getString("host", "").orEmpty())
+  val port = field(L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
+  val user = field(L10n.text("username"), prefs.getString("user", "").orEmpty())
+  val pass = field(L10n.text("password"), prefs.getString("password", "").orEmpty())
+  val device = field(L10n.text("device_id"), prefs.getString("device", "king").orEmpty())
+  val skinNames = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky").map { L10n.text(it) }.toTypedArray()
   val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   layout.addView(TextView(this).apply {
-   text = "Appearance"; textSize = 18f; setTextColor(currentSkin().foreground)
+   text = L10n.text("appearance"); textSize = 18f; setTextColor(currentSkin().foreground)
   })
   val skinChoice = Spinner(this)
   val spinnerSkin = currentSkin()
@@ -868,15 +868,15 @@ class MainActivity : Activity() {
   skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
   layout.addView(skinChoice)
   val autoSync = CheckBox(this).apply {
-   text = "Automatic background MQTT and sleep sync"
+   text = L10n.text("auto_sync")
    isChecked = prefs.getBoolean("auto", false)
    setTextColor(currentSkin().foreground)
   }
   layout.addView(autoSync)
-  val interval = field("Sync interval (minutes, 1-60)",
+  val interval = field(L10n.text("sync_interval"),
    prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
-  val save = Button(this).apply { text = "Save settings" }
-  val back = Button(this).apply { text = "Back" }
+  val save = Button(this).apply { text = L10n.text("save_settings") }
+  val back = Button(this).apply { text = L10n.text("back") }
   val status = TextView(this).apply { setTextColor(currentSkin().foreground) }
   layout.addView(save)
   layout.addView(back)
@@ -888,7 +888,7 @@ class MainActivity : Activity() {
    if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
     intervalMinutes == null || intervalMinutes !in 1..60 ||
     !d.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Invalid host, port or device ID"
+    status.text = L10n.text("invalid_settings")
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", p.toString()).putString("user", user.text.toString())
