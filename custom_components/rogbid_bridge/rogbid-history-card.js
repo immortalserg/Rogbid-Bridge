@@ -185,6 +185,7 @@ class RogbidHistoryCard extends HTMLElement {
       this._kind === "oxygen" ? ["Date", "SpO₂"] :
       this._kind === "steps" ? ["Date", "Steps", "kcal", "km"] :
       ["Wake date", "Duration", "Deep", "Light", "REM", "Score"];
+    if (this._hass?.user?.is_admin) headings.push("Delete");
     const tr = document.createElement("tr");
     for (const heading of headings) {
       const th = document.createElement("th");
@@ -207,6 +208,32 @@ class RogbidHistoryCard extends HTMLElement {
         const td = document.createElement("td");
         td.textContent = value == null ? "—" : String(value);
         row.append(td);
+      }
+      if (this._hass?.user?.is_admin) {
+        const cell = document.createElement("td");
+        const button = document.createElement("button");
+        button.textContent = "🗑";
+        button.title = "Delete this record from Home Assistant only";
+        button.setAttribute("aria-label", "Delete history record");
+        button.addEventListener("click", async event => {
+          event.stopPropagation();
+          if (!record._record_id) return;
+          if (!confirm("Delete this record from Home Assistant? It will remain on the watch.")) return;
+          button.disabled = true;
+          try {
+            await this._hass.callWS({
+              type: "rogbid_bridge/delete_record",
+              device_id: this._deviceId, kind: this._kind,
+              record_id: record._record_id
+            });
+            await this._load();
+          } catch (error) {
+            button.disabled = false;
+            alert("Cannot delete record: " + String(error.message || error));
+          }
+        });
+        cell.append(button);
+        row.append(cell);
       }
       tbody.append(row);
     }
