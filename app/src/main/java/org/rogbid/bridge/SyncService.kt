@@ -101,6 +101,7 @@ class SyncService : Service() {
  }
  override fun onCreate() {
   super.onCreate()
+  L10n.init(this)
   worker.start()
   handler = Handler(worker.looper)
   val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
