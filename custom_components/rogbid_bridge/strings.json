@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect Rogbid Bridge",
-        "description": "Enter the device ID configured in Rogbid Bridge on your watch.",
+        "description": "Select a detected watch from MQTT. If no watches are found, enter the complete Watch (MQTT device ID) manually.",
         "data": {
           "device_id": "MQTT device ID"
         }
