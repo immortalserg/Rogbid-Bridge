@@ -3,6 +3,21 @@ const KINDS = [["heart","❤️ Pulse"],["oxygen","🩸 SpO₂"],["steps","👣 
 const EXTRA_KINDS = ["kcal","km"];
 const historyKind = kind => EXTRA_KINDS.includes(kind) ? "steps" : kind;
 const viewForKind = (config,kind) => config?.view_modes?.[kind] || config?.view_mode || "table";
+const TOTAL_KINDS = ["steps","kcal","km"];
+const showTotals = (config,kind) => config?.show_totals?.[kind] === true;
+const dailyDate = raw => {
+  const match = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]),Number(match[2])-1,Number(match[3]));
+  return date.getFullYear()===Number(match[1]) && date.getMonth()===Number(match[2])-1 &&
+    date.getDate()===Number(match[3]) ? date : null;
+};
+const totalValue = (record,kind) => {
+  const key = kind === "kcal" ? "kcal" : kind === "km" ? "diatance" : "steps";
+  const raw = record[key];
+  const value = raw == null || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value / (kind === "steps" ? 1 : 1000) : null;
+};
 const orderKinds = v => {
   const requested = Array.isArray(v) ? v : [];
   return [...new Set([...requested.filter(k=>KINDS.some(([id])=>id===k)),...KINDS.map(([id])=>id)])];
@@ -60,6 +75,7 @@ class RogbidHistoryCard extends HTMLElement {
     this._devices = this._devices || [];
     this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
     this._rows = [];
+    this._totalRows = [];
     this._loading = false;
     this._error = "";
     this._render();
@@ -117,9 +133,17 @@ class RogbidHistoryCard extends HTMLElement {
         limit: Math.max(1,Math.min(500,Number(this._config.history_limit)||200))
       });
       if (request === this._requestId) this._rows = result.records || [];
+      if (TOTAL_KINDS.includes(kind) && showTotals(this._config,kind)) {
+        // Fetch independently of the chart/table row limit so a year can be summed.
+        const totalsResult = await this._hass.callWS({
+          type:"rogbid_bridge/history", device_id:this._deviceId, kind:"steps", limit:500
+        });
+        if (request === this._requestId) this._totalRows = totalsResult.records || [];
+      } else if (request === this._requestId) this._totalRows = [];
     } catch (error) {
       if (request === this._requestId) {
         this._rows = [];
+        this._totalRows = [];
         this._error = String(error.message || error);
       }
     } finally {
@@ -148,6 +172,10 @@ class RogbidHistoryCard extends HTMLElement {
           .scroll { overflow:auto; }
           svg.history-chart { width:100%; height:auto; color:var(--primary-text-color); }
           .hint { color:var(--secondary-text-color); padding:12px 0; }
+          .totals { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 12px; }
+          .total { padding:8px 5px;border:1px solid var(--divider-color);border-radius:8px;text-align:center;min-width:0; }
+          .total strong { display:block;font-size:17px;overflow-wrap:anywhere; }
+          .total small { color:var(--secondary-text-color);font-size:11px; }
           .sleep-row { cursor:pointer; }
           .sleep-row:focus { outline:2px solid var(--primary-color); }
           .sleep-detail { padding:12px 4px; }
@@ -209,7 +237,10 @@ class RogbidHistoryCard extends HTMLElement {
       area.append(note);
       return;
     }
-    if (viewForKind(this._config,this._kind) === "graph") { this._renderGraph(area); return; }
+    if (viewForKind(this._config,this._kind) === "graph") {
+      if (TOTAL_KINDS.includes(this._kind) && showTotals(this._config,this._kind)) this._renderTotals(area);
+      this._renderGraph(area); return;
+    }
     const table = document.createElement("table");
     const headings = this._kind === "heart" ? [t("date"), "BPM"] :
       this._kind === "oxygen" ? [t("date"), "SpO₂"] :
@@ -288,6 +319,42 @@ class RogbidHistoryCard extends HTMLElement {
     }
   }
 
+
+  _renderTotals(area) {
+    const lang = rogbidLang(this._config,this._hass);
+    const labels = lang === "ru" ? ["7 дней","30 дней","365 дней"] :
+      lang === "fr" ? ["7 jours","30 jours","365 jours"] :
+      lang === "de" ? ["7 Tage","30 Tage","365 Tage"] :
+      ["7 days","30 days","365 days"];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const days = [7,30,365];
+    const sums = [0,0,0], counts = [0,0,0];
+    // A date is one daily total, not a sequence of incremental samples.
+    const seen = new Set();
+    for (const record of this._totalRows || []) {
+      const date = dailyDate(record.date);
+      if (!date || seen.has(record.date)) continue;
+      seen.add(record.date);
+      const age = Math.round((Date.UTC(today.getFullYear(),today.getMonth(),today.getDate()) -
+        Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())) / 86400000);
+      if (age < 0) continue;
+      const value = totalValue(record,this._kind);
+      if (value === null) continue;
+      days.forEach((period,i)=>{if(age < period){sums[i]+=value;counts[i]++;}});
+    }
+    const container=document.createElement("div");container.className="totals";
+    const formatter=new Intl.NumberFormat(lang,{maximumFractionDigits:this._kind==="km"?1:0});
+    days.forEach((period,i)=>{
+      const item=document.createElement("div");item.className="total";
+      const value=document.createElement("strong");
+      value.textContent=counts[i] ? formatter.format(this._kind==="km"?sums[i]:Math.round(sums[i])) : "—";
+      const label=document.createElement("small");
+      label.textContent=labels[i]+" · "+(this._kind==="steps"?(lang==="ru"?"шагов":"steps"):this._kind);
+      item.append(value,label);container.append(item);
+    });
+    area.append(container);
+  }
 
   _renderGraph(area) {
     const metric = {heart:"bpm",oxygen:"spo2",steps:"steps",kcal:"kcal",km:"diatance",sleep:"duration_minutes"}[this._kind];
@@ -508,6 +575,20 @@ class RogbidHistoryCardEditor extends HTMLElement {
     deletionLabel.style.cssText = "display:flex;align-items:center;margin-top:12px";
     deletionLabel.append(deletion, document.createTextNode(t("showDelete")));
     this.append(deletionLabel);
+    const totalsTitle=document.createElement("div");
+    totalsTitle.textContent=t("display")+" — ∑";
+    totalsTitle.style.marginTop="12px";this.append(totalsTitle);
+    for (const kind of TOTAL_KINDS) {
+      const toggle=document.createElement("input");toggle.type="checkbox";
+      toggle.checked=showTotals(this._config,kind);
+      toggle.addEventListener("change",()=>{
+        this._update("show_totals",{...(this._config.show_totals||{}),[kind]:toggle.checked});
+      });
+      const label=document.createElement("label");
+      label.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0";
+      label.append(toggle,document.createTextNode("∑ "+(kind==="steps"?t("steps"):kind)+" (7 / 30 / 365)"));
+      this.append(label);
+    }
     const modeTitle=document.createElement("div");
     modeTitle.textContent=t("display");modeTitle.style.marginTop="12px";this.append(modeTitle);
     for (const [kind,iconLabel] of KINDS) {
