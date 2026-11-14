@@ -1,13 +1,15 @@
 /* Rogbid Bridge history card, no external dependencies. */
 class RogbidHistoryCard extends HTMLElement {
   static getConfigElement() { return document.createElement("rogbid-history-card-editor"); }
-  static getStubConfig() { return { device_id: "king", title: "Rogbid Bridge" }; }
+  static getStubConfig() { return { title: "Rogbid Bridge" }; }
 
   setConfig(config) {
-    if (!config.device_id || !/^[A-Za-z0-9_-]+$/.test(config.device_id)) {
+    if (config.device_id && !/^[A-Za-z0-9_-]+$/.test(config.device_id)) {
       throw new Error("Rogbid Bridge card requires a valid device_id");
     }
     this._config = config;
+    this._deviceId = config.device_id || null;
+    this._devices = [];
     this._kind = this._kind || "heart";
     this._rows = [];
     this._loading = false;
@@ -19,21 +21,34 @@ class RogbidHistoryCard extends HTMLElement {
     this._hass = hass;
     if (this.isConnected && !this._loaded) {
       this._loaded = true;
-      this._load();
+      this._initialize();
     }
   }
 
   connectedCallback() {
     if (this._hass && !this._loaded) {
       this._loaded = true;
-      this._load();
+      this._initialize();
     }
   }
 
   disconnectedCallback() { this._loaded = false; }
 
+  async _initialize() {
+    try {
+      const result = await this._hass.callWS({ type: "rogbid_bridge/devices" });
+      this._devices = result.devices || [];
+      if (!this._deviceId && this._devices.length) this._deviceId = this._devices[0].device_id;
+      this._render();
+      if (this._deviceId) await this._load();
+    } catch (error) {
+      this._error = String(error.message || error);
+      this._render();
+    }
+  }
+
   async _load() {
-    if (!this._hass) return;
+    if (!this._hass || !this._deviceId) return;
     const kind = this._kind;
     const request = (this._requestId || 0) + 1;
     this._requestId = request;
@@ -43,7 +58,7 @@ class RogbidHistoryCard extends HTMLElement {
     try {
       const result = await this._hass.callWS({
         type: "rogbid_bridge/history",
-        device_id: this._config.device_id,
+        device_id: this._deviceId,
         kind,
         limit: 200
       });
@@ -70,6 +85,7 @@ class RogbidHistoryCard extends HTMLElement {
           ha-card { padding: 16px; }
           header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
           h2 { margin:0; font-size:20px; }
+          select { max-width:100%; padding:6px; background:var(--card-background-color); color:var(--primary-text-color); border:1px solid var(--divider-color); border-radius:6px; }
           nav { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
           button { border:1px solid var(--divider-color); background:transparent; color:var(--primary-text-color); padding:8px 10px; border-radius:8px; cursor:pointer; }
           button[aria-pressed="true"] { background:var(--primary-color); color:var(--text-primary-color, white); }
@@ -90,6 +106,22 @@ class RogbidHistoryCard extends HTMLElement {
       this._root.getElementById("refresh").addEventListener("click", () => this._load());
     }
     this._root.querySelector("h2").textContent = this._config.title || "Rogbid Bridge";
+    const header = this._root.querySelector("header");
+    const oldSelect = header.querySelector("select");
+    if (oldSelect) oldSelect.remove();
+    if (this._devices.length > 1) {
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Rogbid watch");
+      for (const device of this._devices) {
+        const option = document.createElement("option");
+        option.value = device.device_id;
+        option.textContent = device.name || ("Rogbid " + device.device_id.slice(-8));
+        select.append(option);
+      }
+      select.value = this._deviceId;
+      select.addEventListener("change", () => { this._deviceId = select.value; this._load(); });
+      header.insertBefore(select, this._root.getElementById("refresh"));
+    }
     const nav = this._root.querySelector("nav");
     nav.replaceChildren();
     for (const [key, label] of [["heart","❤️ Pulse"],["oxygen","🩸 SpO₂"],["steps","👣 Steps"],["sleep","🌙 Sleep"]]) {
@@ -110,7 +142,7 @@ class RogbidHistoryCard extends HTMLElement {
     if (this._loading || this._error || !this._rows.length) {
       const note = document.createElement("div");
       note.className = "hint";
-      note.textContent = this._loading ? "Loading…" : this._error || "No records yet";
+      note.textContent = this._loading ? "Loading…" : this._error || (!this._deviceId ? "No Rogbid watches configured" : "No records yet");
       area.append(note);
       return;
     }
@@ -239,19 +271,58 @@ class RogbidHistoryCard extends HTMLElement {
 
 class RogbidHistoryCardEditor extends HTMLElement {
   setConfig(config) { this._config = config; this._render(); }
+  set hass(hass) {
+    if (this._hass === hass || this._fetching || this._devices) return;
+    this._hass = hass;
+    this._fetching = true;
+    hass.callWS({ type: "rogbid_bridge/devices" })
+      .then(result => { this._devices = result.devices || []; this._render(); })
+      .catch(() => { this._devices = []; this._render(); })
+      .finally(() => { this._fetching = false; });
+  }
+  _update(key, value) {
+    const config = { ...this._config };
+    if (value) config[key] = value;
+    else delete config[key];
+    this._config = config;
+    this.dispatchEvent(new CustomEvent("config-changed", {
+      detail: { config }, bubbles: true, composed: true
+    }));
+  }
   _render() {
     this.replaceChildren();
-    for (const [key, label] of [["device_id","MQTT device ID"],["title","Card title"]]) {
-      const input = document.createElement("input");
-      input.placeholder = label;
-      input.value = this._config[key] || "";
-      input.style.cssText = "display:block;margin:8px 0;padding:8px;width:90%";
-      input.addEventListener("change", () => {
-        this._config = { ...this._config, [key]: input.value };
-        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
-      });
-      this.append(input);
+    const label = document.createElement("label");
+    label.textContent = "Rogbid watch";
+    label.style.display = "block";
+    this.append(label);
+    const select = document.createElement("select");
+    select.style.cssText = "display:block;margin:8px 0;padding:8px;width:95%";
+    const auto = document.createElement("option");
+    auto.value = "";
+    auto.textContent = "Automatic (first configured watch)";
+    select.append(auto);
+    const devices = this._devices || [];
+    for (const device of devices) {
+      const option = document.createElement("option");
+      option.value = device.device_id;
+      option.textContent = device.name || ("Rogbid " + device.device_id.slice(-8));
+      select.append(option);
     }
+    if (this._config.device_id && !devices.some(d => d.device_id === this._config.device_id)) {
+      const option = document.createElement("option");
+      option.value = this._config.device_id;
+      option.textContent = this._config.device_id;
+      select.append(option);
+    }
+    select.value = this._config.device_id || "";
+    select.addEventListener("change", () => this._update("device_id", select.value));
+    this.append(select);
+    const input = document.createElement("input");
+    input.placeholder = "Card title";
+    input.value = this._config.title || "";
+    input.style.cssText = "display:block;margin:8px 0;padding:8px;width:90%";
+    input.addEventListener("change", () => this._update("title", input.value));
+    this.append(input);
   }
 }
 customElements.define("rogbid-history-card", RogbidHistoryCard);
