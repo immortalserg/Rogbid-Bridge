@@ -17,9 +17,10 @@ STREAM_UUID = "d312a003-7a7b-4e72-9e5b-a21b3471a001"
 class GattDiagnostics:
     """Probe one advertisement at a time without interrupting MQTT transport."""
 
-    def __init__(self, hass, expected_device_id):
+    def __init__(self, hass, expected_device_id, journal):
         self.hass = hass
         self.expected_device_id = expected_device_id
+        self.journal = journal
         self.task = None
         self.last_attempt = 0.0
 
@@ -97,6 +98,7 @@ class GattDiagnostics:
                             "Watch Bridge GATT: device_info verified id=%s protocol=%s",
                             reported_id, reply.get("protocol"),
                         )
+                        await self._read_heart_history(client)
                     else:
                         _LOGGER.warning(
                             "Watch Bridge GATT: device_id mismatch expected=%s reported=%s",
@@ -116,6 +118,43 @@ class GattDiagnostics:
                     await asyncio.wait_for(client.disconnect(), timeout=10)
                 except Exception as exc:
                     _LOGGER.warning("Watch Bridge GATT: disconnect failed: %s", exc)
+
+
+    async def _read_heart_history(self, client):
+        """Read up to ten heart records in bounded single-record GATT pages."""
+        after_id = 0
+        count = 0
+        for _ in range(10):
+            request = json.dumps({"type": "heart_history", "after_id": after_id})
+            await asyncio.wait_for(
+                client.write_gatt_char(REQUEST_UUID, request.encode(), response=True),
+                timeout=10,
+            )
+            raw = await asyncio.wait_for(client.read_gatt_char(STREAM_UUID), timeout=10)
+            reply = json.loads(bytes(raw).decode())
+            if not isinstance(reply, dict) or reply.get("type") != "heart_history":
+                raise ValueError("Unexpected heart_history response")
+            if reply.get("done") is True:
+                break
+            record = reply.get("record")
+            if not isinstance(record, dict):
+                raise ValueError("Missing heart history record")
+            record_id = record.get("id")
+            measured_at = record.get("measured_at")
+            heart_rate = record.get("heart_rate")
+            if (type(record_id) is not int or record_id <= after_id
+                    or not isinstance(measured_at, str)
+                    or type(heart_rate) is not int or not 35 <= heart_rate <= 220):
+                raise ValueError("Invalid heart history record")
+            payload = {"kind": "heart", "id": f"ble-heart-{record_id}",
+                       "measured_at": measured_at, "heart_rate": heart_rate}
+            await self.hass.async_add_executor_job(
+                self.journal.insert, self.expected_device_id, "heart",
+                payload["id"], measured_at, payload,
+            )
+            after_id = record_id
+            count += 1
+        _LOGGER.warning("Watch Bridge GATT: heart history received=%s", count)
 
     def close(self):
         if self.task is not None and not self.task.done():
