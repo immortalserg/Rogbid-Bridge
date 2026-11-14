@@ -11,7 +11,6 @@ Screenshots from the Rogbid Z10 smartwatch interface:
 <p align="center">
   <img src="img/screenshot.png" alt="Rogbid Bridge screenshot 1" width="220" />
   <img src="img/screenshot2.png" alt="Rogbid Bridge screenshot 2" width="220" />
-  <img src="img/screenshot3.png" alt="Rogbid Bridge screenshot 3" width="220" />
   <img src="img/screenshot4.png" alt="Rogbid Bridge screenshot 4" width="220" />
 </p>
 
