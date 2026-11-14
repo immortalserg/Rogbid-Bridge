@@ -71,7 +71,7 @@ class MainActivity : Activity() {
   button.setTextColor(skin.foreground)
   button.isAllCaps = false
   if (button.text.toString() != "♥" && button.text.toString() != "O₂") {
-   button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+   button.setAutoSizeTextTypeUniformWithConfiguration(13, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
   }
   val radius = 18f * resources.displayMetrics.density
   val shape = GradientDrawable().apply {
@@ -807,6 +807,11 @@ class MainActivity : Activity() {
   Button(this).apply {
    text = label
    styleButton(this, currentSkin())
+   textSize = 17f
+   val gap = (8 * resources.displayMetrics.density).toInt()
+   layoutParams = LinearLayout.LayoutParams(
+    LinearLayout.LayoutParams.MATCH_PARENT, (52 * resources.displayMetrics.density).toInt()
+   ).apply { bottomMargin = gap }
    setOnClickListener { action() }
   }
 
@@ -835,7 +840,9 @@ class MainActivity : Activity() {
   settingsTitle(layout, L10n.text("settings"))
   layout.addView(settingsButton("MQTT") { showMqttSettings() })
   layout.addView(settingsButton("Home Assistant") { showHomeAssistantSettings() })
-  layout.addView(settingsButton("Bluetooth") { showBluetoothSettings() })
+  layout.addView(settingsButton("Bluetooth") {
+   startActivity(Intent(this, BleDiagnosticsActivity::class.java))
+  })
   layout.addView(settingsButton(L10n.text("appearance") + " / " + L10n.text("settings")) {
    showAppSettings()
   })
@@ -887,7 +894,7 @@ class MainActivity : Activity() {
    setTextColor(currentSkin().foreground)
   })
   val fullId = TextView(this).apply {
-   text = watchId.chunked(12).joinToString("\\n")
+   text = watchId.chunked(12).joinToString("\n")
    textSize = 14f
    typeface = Typeface.MONOSPACE
    setTextColor(currentSkin().foreground)
@@ -903,16 +910,6 @@ class MainActivity : Activity() {
    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid MQTT device ID", watchId))
    notifyMessage(L10n.text("copied"))
-  })
-  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
-  show(layout)
- }
-
- private fun showBluetoothSettings() {
-  val layout = page()
-  settingsTitle(layout, "Bluetooth")
-  layout.addView(settingsButton("Bluetooth BLE — диагностика / Diagnostics") {
-   startActivity(Intent(this, BleDiagnosticsActivity::class.java))
   })
   layout.addView(settingsButton(L10n.text("back")) { showSettings() })
   show(layout)
