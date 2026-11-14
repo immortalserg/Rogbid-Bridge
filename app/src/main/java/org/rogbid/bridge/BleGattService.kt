@@ -16,6 +16,7 @@ import android.os.IBinder
 import android.os.ParcelUuid
 import android.util.Log
 import java.util.UUID
+import org.json.JSONObject
 
 /**
  * First BLE transport milestone: a discoverable, read-only GATT endpoint.
@@ -31,6 +32,7 @@ class BleGattService : Service() {
  private var server: BluetoothGattServer? = null
  private var advertising = false
  private var callback: AdvertiseCallback? = null
+ private var response = "{\"type\":\"error\",\"error\":\"no_request\"}"
 
  private val gattCallback = object : BluetoothGattServerCallback() {
   override fun onCharacteristicReadRequest(
@@ -38,7 +40,7 @@ class BleGattService : Service() {
    characteristic: BluetoothGattCharacteristic
   ) {
    val value = if (characteristic.uuid.toString() == STREAM_ID)
-    "{\"type\":\"done\",\"cursor\":\"\"}".toByteArray(Charsets.UTF_8)
+    synchronized(this@BleGattService) { response.toByteArray(Charsets.UTF_8) }
    else ByteArray(0)
    val status = if (offset <= value.size) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_INVALID_OFFSET
    server?.sendResponse(device, requestId, status, offset,
@@ -48,9 +50,24 @@ class BleGattService : Service() {
    device: BluetoothDevice, requestId: Int, characteristic: BluetoothGattCharacteristic,
    preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray
   ) {
-   // No sync commands are accepted until the transport protocol is implemented.
-   if (responseNeeded) server?.sendResponse(device, requestId,
-    BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, offset, null)
+   var status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
+   if (characteristic.uuid.toString() == REQUEST_ID && !preparedWrite && offset == 0 && value.size <= 256) {
+    try {
+     val request = JSONObject(String(value, Charsets.UTF_8))
+     if (request.optString("type") == "device_info") {
+      val id = WatchIdentity.id(this@BleGattService)?.trim().orEmpty()
+      if (id.isNotEmpty()) {
+       synchronized(this@BleGattService) {
+        response = JSONObject().put("type", "device_info")
+         .put("device_id", id).put("protocol", 1).toString()
+       }
+       status = BluetoothGatt.GATT_SUCCESS
+       Log.i(TAG, "GATT device_info requested")
+      }
+     }
+    } catch (e: Exception) { Log.w(TAG, "Invalid GATT request", e) }
+   }
+   if (responseNeeded) server?.sendResponse(device, requestId, status, offset, null)
   }
  }
 
