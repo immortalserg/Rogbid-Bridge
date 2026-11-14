@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .const import DOMAIN, CONF_DEVICE_ID
+from .ble_diagnostics import GattDiagnostics
 from .storage import Journal
 from .websocket import async_register as register_websocket
 
@@ -55,6 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _register_lovelace_resource(hass)
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
+    gatt_diagnostics = GattDiagnostics(hass)
+    entry.async_on_unload(gatt_diagnostics.close)
+
     # Diagnostic-only: advertisements are forwarded by ESPHome Bluetooth Proxy.
     def on_ble_advertisement(service_info, change):
         _LOGGER.warning(
@@ -63,6 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             service_info.source, service_info.connectable,
             service_info.service_uuids, change,
         )
+        gatt_diagnostics.on_advertisement(service_info)
 
     unsub_ble = bluetooth.async_register_callback(
         hass,
