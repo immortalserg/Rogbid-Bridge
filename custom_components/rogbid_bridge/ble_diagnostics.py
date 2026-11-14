@@ -1,5 +1,6 @@
 """One-shot GATT diagnostic for discovered Watch Bridge BLE advertisements."""
 import asyncio
+import json
 import logging
 import time
 
@@ -16,8 +17,9 @@ STREAM_UUID = "d312a003-7a7b-4e72-9e5b-a21b3471a001"
 class GattDiagnostics:
     """Probe one advertisement at a time without interrupting MQTT transport."""
 
-    def __init__(self, hass):
+    def __init__(self, hass, expected_device_id):
         self.hass = hass
+        self.expected_device_id = expected_device_id
         self.task = None
         self.last_attempt = 0.0
 
@@ -62,6 +64,33 @@ class GattDiagnostics:
                     label, "found" if ch else "MISSING",
                     list(ch.properties) if ch else [],
                 )
+            if REQUEST_UUID in chars and STREAM_UUID in chars:
+                await asyncio.wait_for(
+                    client.write_gatt_char(
+                        REQUEST_UUID,
+                        json.dumps({"type": "device_info"}).encode("utf-8"),
+                        response=True,
+                    ),
+                    timeout=10,
+                )
+                raw = await asyncio.wait_for(
+                    client.read_gatt_char(STREAM_UUID), timeout=10
+                )
+                reply = json.loads(bytes(raw).decode("utf-8"))
+                if not isinstance(reply, dict) or reply.get("type") != "device_info":
+                    _LOGGER.warning("Watch Bridge GATT: unexpected device_info reply: %s", reply)
+                else:
+                    reported_id = reply.get("device_id")
+                    if reported_id == self.expected_device_id:
+                        _LOGGER.warning(
+                            "Watch Bridge GATT: device_info verified id=%s protocol=%s",
+                            reported_id, reply.get("protocol"),
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "Watch Bridge GATT: device_id mismatch expected=%s reported=%s",
+                            self.expected_device_id, reported_id,
+                        )
             _LOGGER.warning("Watch Bridge GATT: diagnostic complete for %s", address)
         except asyncio.CancelledError:
             raise
