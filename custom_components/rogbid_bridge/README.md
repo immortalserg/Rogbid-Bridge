@@ -2,7 +2,7 @@
 
 **Status: initial scaffold; not ready for installation.**
 
-The integration connects to the existing Home Assistant MQTT broker, subscribes to `rogbid/<device_id>/state`, and exposes live step, raw calorie and raw distance sensors. The watch's current v0.6.0 firmware-side app publishes **only the current state**, not complete historical records. Historical journal sync therefore requires a follow-up update to the Android app.
+The integration connects to the existing Home Assistant MQTT broker, subscribes to `rogbid/<device_id>/state`, and exposes live step, raw calorie and raw distance sensors. The released watch app v0.6.0 publishes only current state. The Android changes in this development branch now also replay up to 500 pulse/SpO₂ measurements, 100 daily step records and 500 archived sleep sessions over MQTT each sync. This is not released or tested on the watch yet.
 
 ## Journal protocol (planned)
 
@@ -20,8 +20,8 @@ Publish QoS 1 JSON on `rogbid/<device_id>/history/<kind>`, where `kind` is one o
 
 ## Next steps
 
-1. Add Android export for heart, oxygen, daily steps and sleep history with stable IDs and original timestamps.
-2. Add cursor/ack synchronization and safe replay after MQTT reconnect.
+1. Verify the Android history export on the watch and the MQTT payloads in HA.
+2. Add cursor/ack synchronization to replace the current bounded full replay and avoid growing MQTT traffic.
 3. Add Home Assistant history API and Lovelace card for four journals and sleep-stage chart.
 4. Add correct units and live heart, oxygen and sleep sensors.
 5. Test on HAOS and publish a HACS-compatible integration release.
