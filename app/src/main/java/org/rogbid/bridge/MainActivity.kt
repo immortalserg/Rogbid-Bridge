@@ -2,6 +2,7 @@ package org.rogbid.bridge
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -11,6 +12,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.graphics.Color
+import android.content.res.ColorStateList
+import android.graphics.drawable.RippleDrawable
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
@@ -57,15 +60,32 @@ class MainActivity : Activity() {
   "light" -> Skin(Color.rgb(246, 248, 251), Color.rgb(25, 36, 50), Color.rgb(23, 119, 192), Color.rgb(225, 235, 244))
   "forest" -> Skin(Color.rgb(13, 40, 34), Color.WHITE, Color.rgb(116, 225, 171), Color.rgb(28, 75, 63))
   "sunset" -> Skin(Color.rgb(49, 24, 44), Color.WHITE, Color.rgb(255, 170, 108), Color.rgb(103, 49, 76))
+  "pink" -> Skin(Color.rgb(255, 232, 242), Color.rgb(83, 35, 64), Color.rgb(184, 49, 111), Color.rgb(250, 192, 218))
+  "lavender" -> Skin(Color.rgb(244, 238, 255), Color.rgb(56, 42, 87), Color.rgb(112, 74, 181), Color.rgb(221, 207, 246))
+  "mint" -> Skin(Color.rgb(232, 251, 243), Color.rgb(25, 72, 58), Color.rgb(22, 137, 105), Color.rgb(189, 235, 217))
+  "cream" -> Skin(Color.rgb(255, 249, 232), Color.rgb(78, 59, 35), Color.rgb(164, 104, 40), Color.rgb(246, 226, 187))
+  "sky" -> Skin(Color.rgb(232, 246, 255), Color.rgb(30, 60, 91), Color.rgb(36, 115, 184), Color.rgb(196, 227, 247))
   else -> Skin(Color.rgb(17, 21, 31), Color.WHITE, Color.rgb(105, 187, 255), Color.rgb(42, 51, 69))
  }
  private fun styleButton(button: Button, skin: Skin) {
   button.setTextColor(skin.foreground)
   button.isAllCaps = false
-  button.background = GradientDrawable().apply {
-   setColor(skin.button)
-   cornerRadius = 18f * resources.displayMetrics.density
+  if (button.text.toString() != "♥" && button.text.toString() != "O₂") {
+   button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
   }
+  val radius = 18f * resources.displayMetrics.density
+  val shape = GradientDrawable().apply {
+   setColor(skin.button)
+   cornerRadius = radius
+  }
+  val mask = GradientDrawable().apply {
+   setColor(Color.WHITE)
+   cornerRadius = radius
+  }
+  button.background = RippleDrawable(
+   ColorStateList.valueOf(skin.accent and 0x00FFFFFF or 0x66000000),
+   shape, mask
+  )
  }
  private fun showReading(type: Int, value: String) {
   val target = if (type == 21) pulseValue else oxygenValue
@@ -119,21 +139,20 @@ class MainActivity : Activity() {
    } catch (_: Exception) { "—" }
    var sleep = "—"
    try {
-    contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
-     null, null, null, "_id DESC")?.use { cursor ->
-     if (cursor.moveToFirst()) {
-      fun minutes(prefix: String): Int? {
-       val h = cursor.getColumnIndex(prefix + "HH")
-       val m = cursor.getColumnIndex(prefix + "MM")
-       if (h < 0 || m < 0 || cursor.isNull(h) || cursor.isNull(m)) return null
-       val hh = cursor.getString(h)?.toIntOrNull()
-       val mm = cursor.getString(m)?.toIntOrNull()
-       return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
-      }
-      minutes("sum")?.let { sleep = "${it / 60}h ${it % 60}m" }
+    // Archived sleep takes precedence over the resettable vendor provider.
+    val repo = SleepRepository(this)
+    val saved = try { repo.latest() } finally { repo.close() }
+    if (saved != null) {
+     val mins = saved.optInt("duration_minutes")
+     if (mins > 0) sleep = "${mins / 60}${L10n.text("hours")} ${mins % 60}${L10n.text("minutes")}"
+    } else {
+     SleepCollector(this).read()?.let {
+      sleep = "${it.duration / 60}${L10n.text("hours")} ${it.duration % 60}${L10n.text("minutes")}"
      }
     }
-   } catch (_: Exception) {}
+   } catch (e: Exception) {
+    android.util.Log.w("RogbidSleep", "Cannot load last sleep", e)
+   }
    runOnUiThread {
     lastPulse = heart
     lastOxygen = oxygen
@@ -149,7 +168,7 @@ class MainActivity : Activity() {
   val port = prefs.getString("port", "1883")?.toIntOrNull()
   val id = prefs.getString("device", "king")?.trim().orEmpty()
   if (host.isEmpty() || port == null || port !in 1..65535 ||
-   !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("Configure MQTT in Settings")
+   !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException(L10n.text("configure_mqtt"))
   val topic = "rogbid/$id/measurements/" + (if (type == 21) "heart_rate" else "spo2")
   val client = MqttClient((if (port == 8883) "ssl" else "tcp") + "://$host:$port",
    "rogbid-measure-$id-" + System.currentTimeMillis(), MemoryPersistence())
@@ -216,7 +235,7 @@ class MainActivity : Activity() {
     publishMeasurement(type, heart, oxygen, time)
 
    } catch (e: Exception) {
-    runOnUiThread { notifyMessage((if (saved) "MQTT error: " else "Save error: ") + e.message) }
+    runOnUiThread { notifyMessage((if (saved) L10n.text("mqtt_error") else L10n.text("save_error")) + e.message) }
    }
   }.start()
  }
@@ -241,7 +260,7 @@ class MainActivity : Activity() {
   }
   val sensor = sensorManager.getDefaultSensor(type)
   if (sensor == null) {
-   notifyMessage("Sensor type $type is unavailable")
+   notifyMessage(L10n.text("sensor_unavailable").replace("%s", type.toString()))
    return
   }
   val generation = measurementGeneration
@@ -286,18 +305,18 @@ class MainActivity : Activity() {
   try {
    if (!sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
     stopMeasurement()
-    notifyMessage("Unable to register sensor $type")
+    notifyMessage(L10n.text("sensor_register").replace("%s", type.toString()))
     return
    }
   } catch (e: SecurityException) {
    stopMeasurement()
-   notifyMessage("Sensor permission denied: " + e.message)
+   notifyMessage(L10n.text("sensor_permission") + e.message)
    return
   }
   handler.postDelayed({
    if (generation == measurementGeneration) {
     stopMeasurement()
-    notifyMessage("Measurement timed out")
+    notifyMessage(L10n.text("measurement_timeout"))
    }
   }, 45000)
  }
@@ -306,7 +325,7 @@ class MainActivity : Activity() {
   if (requestCode == 1201) {
    if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
     beginMeasurement(pendingSensorType)
-   } else notifyMessage("Body sensors permission is required")
+   } else notifyMessage(L10n.text("body_permission"))
   }
  }
  private val prefs by lazy { getSharedPreferences("mqtt", MODE_PRIVATE) }
@@ -324,8 +343,10 @@ class MainActivity : Activity() {
  }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-  stopService(android.content.Intent(this, SyncService::class.java))
-  prefs.edit().putBoolean("auto", false).apply()
+  L10n.init(this)
+  if (prefs.getBoolean("auto", false)) {
+   startForegroundService(Intent(this, SyncService::class.java))
+  }
   showHome()
  }
  private fun showHome() {
@@ -345,19 +366,30 @@ class MainActivity : Activity() {
    val cell = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     gravity = Gravity.CENTER
-    setPadding((4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt())
-    background = GradientDrawable().apply {
+    setPadding((4 * density).toInt(), (7 * density).toInt(), (4 * density).toInt(), (7 * density).toInt())
+    val tileShape = GradientDrawable().apply {
      setColor(skin.button)
      cornerRadius = 16 * density
     }
+    val tileMask = GradientDrawable().apply {
+     setColor(Color.WHITE)
+     cornerRadius = 16 * density
+    }
+    background = RippleDrawable(
+     ColorStateList.valueOf(skin.accent and 0x00FFFFFF or 0x66000000),
+     tileShape, tileMask
+    )
+    isClickable = true
+    isFocusable = true
    }
    val caption = TextView(this).apply {
-    text = "$icon  $label"; textSize = 17f; gravity = Gravity.CENTER
+    text = "$icon  $label"; textSize = 15f; gravity = Gravity.CENTER
     setTextColor(skin.accent)
-    setSingleLine(true)
+    setMaxLines(2)
+    setAutoSizeTextTypeUniformWithConfiguration(10, 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
    }
    val value = TextView(this).apply {
-    text = "—"; textSize = 28f; gravity = Gravity.CENTER
+    text = "—"; textSize = 25f; gravity = Gravity.CENTER
     typeface = Typeface.DEFAULT_BOLD
     setTextColor(skin.foreground)
     setSingleLine(true)
@@ -368,14 +400,14 @@ class MainActivity : Activity() {
   }
   val summaryRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val summaryRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val heartCell = tile("♥", "Pulse")
-  val oxygenCell = tile("O₂", "Oxygen")
-  val stepsCell = tile("♟", "Steps")
-  val sleepCell = tile("☾", "Sleep")
+  val heartCell = tile("♥", L10n.text("pulse"))
+  val oxygenCell = tile("O₂", L10n.text("oxygen"))
+  val stepsCell = tile("♟", L10n.text("steps"))
+  val sleepCell = tile("☾", L10n.text("sleep"))
   for ((row, pair) in listOf(
    Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
    Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
-  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (100 * density).toInt(), 1f).apply {
+  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (88 * density).toInt(), 1f).apply {
    setMargins((3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt())
   })
   layout.addView(summaryRow1)
@@ -389,21 +421,23 @@ class MainActivity : Activity() {
   heartCell.first.setOnClickListener { showJournal("heart") }
   oxygenCell.first.setOnClickListener { showJournal("oxygen") }
   stepsCell.first.setOnClickListener { showJournal("steps") }
-  sleepCell.first.setOnClickListener { showJournal("sleep") }
+  sleepCell.first.setOnClickListener { showSleepLatest() }
   measureHeartButton = heartButton
   measureOxygenButton = oxygenButton
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
-  val button = Button(this).apply { text = "Send data" }
-  val history = Button(this).apply { text = "Send history" }
-  val settings = Button(this).apply { text = "Settings" }
+  val button = Button(this).apply { text = L10n.text("send_data") }
+  val history = Button(this).apply { text = L10n.text("send_history") }
+  val settings = Button(this).apply { text = L10n.text("settings") }
   val status = TextView(this)
   val lower = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val lower2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   for (control in arrayOf(button, history, settings)) styleButton(control, skin)
-  lower.addView(button, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { rightMargin = (4 * density).toInt() })
-  lower.addView(history, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f).apply { leftMargin = (4 * density).toInt() })
-  lower2.addView(settings, LinearLayout.LayoutParams(0, (60 * density).toInt(), 1f))
+  val buttonGap = (8 * density).toInt()
+  lower.addView(button, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { rightMargin = buttonGap / 2 })
+  lower.addView(history, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { leftMargin = buttonGap / 2 })
+  lower2.addView(settings, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f))
+  lower2.setPadding(0, buttonGap, 0, 0)
   layout.addView(lower)
   layout.addView(lower2)
   show(layout)
@@ -415,7 +449,7 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage("Configure MQTT in Settings")
+    notifyMessage(L10n.text("configure_mqtt"))
     return@setOnClickListener
    }
    history.isEnabled = false
@@ -427,10 +461,10 @@ class MainActivity : Activity() {
      val uri = Uri.parse("content://com.watchHealth.Walk/query")
      val cursor = contentResolver.query(uri,
       arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date ASC")
-      ?: throw IllegalStateException("History provider returned null")
+      ?: throw IllegalStateException(L10n.text("history_provider_empty"))
      cursor.use {
       val dateIndex = it.getColumnIndex("date")
-      if (dateIndex < 0) throw IllegalStateException("Missing date column")
+      if (dateIndex < 0) throw IllegalStateException(L10n.text("missing_date"))
       while (it.moveToNext()) {
        if (it.isNull(dateIndex)) continue
        val date = it.getString(dateIndex)?.trim().orEmpty()
@@ -444,7 +478,7 @@ class MainActivity : Activity() {
        records[date] = data
       }
      }
-     if (records.isEmpty()) throw IllegalStateException("No dated history records found")
+     if (records.isEmpty()) throw IllegalStateException(L10n.text("no_dated_history"))
      val login = prefs.getString("user", "").orEmpty()
      val password = prefs.getString("password", "").orEmpty()
      val scheme = if (number == 8883) "ssl" else "tcp"
@@ -467,13 +501,13 @@ class MainActivity : Activity() {
         })
        published++
       }
-      runOnUiThread { notifyMessage("History published: " + published + " day(s)") }
+      runOnUiThread { notifyMessage(L10n.text("history_published").replace("%s", published.toString())) }
      } finally {
       if (client.isConnected) client.disconnect()
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { notifyMessage("History error: " + e.message) }
+     runOnUiThread { notifyMessage(L10n.text("history_error") + e.message) }
     } finally {
      runOnUiThread {
       history.isEnabled = true
@@ -488,7 +522,7 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage("Configure MQTT in Settings")
+    notifyMessage(L10n.text("configure_mqtt"))
     return@setOnClickListener
    }
    val login = prefs.getString("user", "").orEmpty()
@@ -590,7 +624,7 @@ class MainActivity : Activity() {
          isRetained = true
         })
       }
-      discovery("steps", "Steps", "steps", null, "measurement")
+      discovery("steps", L10n.text("steps"), "steps", null, "measurement")
       // Direct measurements manage heart rate and SpO2 MQTT discovery.
       discovery("last_update", "Last Update", null, "timestamp", null)
       discovery("sleep_duration", "Sleep Duration", "min", "duration", "measurement")
@@ -603,42 +637,62 @@ class MainActivity : Activity() {
        qos = 1
        isRetained = true
       })
-      runOnUiThread { status.text = "Published " + topic + "\n" + data.toString() }
+      runOnUiThread { status.text = L10n.text("published") + topic + "\n" + data.toString() }
      } finally {
       if (client.isConnected) client.disconnect()
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { notifyMessage("MQTT error: " + e.message) }
+     runOnUiThread { notifyMessage(L10n.text("mqtt_error") + e.message) }
     } finally {
      runOnUiThread { button.isEnabled = true }
     }
    }.start()
   }
  }
+ private fun sleepScreens() = SleepScreens(
+  this, currentSkin().background, currentSkin().foreground,
+  currentSkin().accent, currentSkin().button
+ ) { showHome() }
+
+ private fun showSleepLatest() {
+  stopMeasurement()
+  try {
+   sleepScreens().latest()
+  } catch (e: Exception) {
+   android.util.Log.e("RogbidSleep", "Sleep screen failed", e)
+   notifyMessage(L10n.text("sleep_screen_error") + (e.message ?: e.javaClass.simpleName))
+   showHome()
+  }
+ }
+
  private fun showJournal(kind: String) {
   val skin = currentSkin()
   val layout = page()
   val title = when (kind) {
-   "heart" -> "♥ Pulse history"
-   "oxygen" -> "O₂ Oxygen history"
-   "steps" -> "♟ Steps history"
-   else -> "☾ Sleep history"
+   "heart" -> L10n.text("pulse_history")
+   "oxygen" -> L10n.text("oxygen_history")
+   "steps" -> L10n.text("steps_history")
+   else -> L10n.text("sleep_history")
   }
   layout.addView(TextView(this).apply {
    text = title; textSize = 22f; setTextColor(skin.foreground)
   })
   if (kind == "sleep") {
-   val diagnostic = Button(this).apply { text = "Diagnose sleep source" }
+   sleepScreens().history()
+   return
+  }
+  if (kind == "sleep-diagnostics") {
+   val diagnostic = Button(this).apply { text = L10n.text("diagnose") }
    styleButton(diagnostic, skin)
    layout.addView(diagnostic)
    diagnostic.setOnClickListener { showSleepDiagnostics() }
   }
   val entries = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-  layout.addView(entries)
-  val back = Button(this).apply { text = "Back" }
+  val back = Button(this).apply { text = L10n.text("back") }
   styleButton(back, skin)
   layout.addView(back)
+  layout.addView(entries)
   back.setOnClickListener { showHome() }
   show(layout)
   Thread {
@@ -658,15 +712,24 @@ class MainActivity : Activity() {
       }
      }
     } else if (kind == "steps") {
-     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
-      arrayOf("date", "steps"), null, null, "date DESC")?.use { cursor ->
-      val date = cursor.getColumnIndex("date")
-      val steps = cursor.getColumnIndex("steps")
-      if (date >= 0 && steps >= 0) while (cursor.moveToNext() && records.size < 100) {
-       records.add(cursor.getString(date) + "    " + cursor.getLong(steps) + " steps")
+      contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+       arrayOf("date", "steps", "kcal", "diatance"), null, null, "date DESC")?.use { cursor ->
+       fun value(name: String): String {
+        val index = cursor.getColumnIndex(name)
+        return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
+       }
+       while (cursor.moveToNext() && records.size < 100) {
+        // Vendor "kcal" values are calories; "diatance" values are metres.
+        val calories = value("kcal").replace(',', '.').toDoubleOrNull()
+        val distanceMetres = value("diatance").replace(',', '.').toDoubleOrNull()
+        val kilocalories = calories?.takeIf { it.isFinite() && it >= 0.0 }
+         ?.let { kotlin.math.round(it / 1000.0).toLong().toString() } ?: "—"
+        val kilometres = distanceMetres?.takeIf { it.isFinite() && it >= 0.0 }
+         ?.let { String.format(java.util.Locale.getDefault(), "%.1f", it / 1000.0) } ?: "—"
+        records.add("${value("date")} — ${value("steps")} ${L10n.text("steps")} — $kilocalories ${L10n.text("calories")} — $kilometres km")
+       }
       }
-     }
-    } else {
+     } else {
      contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
       null, null, null, "_id DESC")?.use { cursor ->
       fun value(name: String): String? {
@@ -676,16 +739,16 @@ class MainActivity : Activity() {
       while (cursor.moveToNext() && records.size < 100) {
        val hh = value("sumHH")?.toIntOrNull()
        val mm = value("sumMM")?.toIntOrNull()
-       val duration = if (hh != null && mm != null) "${hh}h ${mm}m" else "—"
-       records.add((value("sleeptime") ?: value("_id") ?: "Sleep") + "    " + duration)
+       val duration = if (hh != null && mm != null) "${hh}${L10n.text("hours")} ${mm}${L10n.text("minutes")}" else "—"
+       records.add((value("sleeptime") ?: value("_id") ?: L10n.text("sleep")) + "    " + duration)
       }
      }
     }
    } catch (e: Exception) {
-    records.add("History unavailable: " + e.message)
+    records.add(L10n.text("history_unavailable") + e.message)
    }
    runOnUiThread {
-    if (records.isEmpty()) records.add("No history available")
+    if (records.isEmpty()) records.add(L10n.text("no_history"))
     for (record in records) entries.addView(TextView(this).apply {
      text = record; textSize = 16f
      setTextColor(skin.foreground)
@@ -698,20 +761,20 @@ class MainActivity : Activity() {
   val skin = currentSkin()
   val layout = page()
   layout.addView(TextView(this).apply {
-   text = "Sleep source diagnostics"; textSize = 21f; setTextColor(skin.foreground)
+   text = L10n.text("sleep_diagnostics"); textSize = 21f; setTextColor(skin.foreground)
   })
   val hint = TextView(this).apply {
-   text = "Capture before and after opening the stock Sleep app. Compare IDs, times and all fields."
+   text = L10n.text("diagnostic_hint")
    textSize = 14f; setTextColor(skin.foreground)
   }
   layout.addView(hint)
   val output = TextView(this).apply {
-   text = "Tap Read source"; textSize = 13f; setTextColor(skin.foreground)
+   text = L10n.text("tap_read"); textSize = 13f; setTextColor(skin.foreground)
    setTextIsSelectable(true)
   }
-  val read = Button(this).apply { text = "Read source" }
-  val copy = Button(this).apply { text = "Copy snapshot" }
-  val back = Button(this).apply { text = "Back" }
+  val read = Button(this).apply { text = L10n.text("read_source") }
+  val copy = Button(this).apply { text = L10n.text("copy_snapshot") }
+  val back = Button(this).apply { text = L10n.text("back") }
   for (button in arrayOf(read, copy, back)) {
    styleButton(button, skin)
    layout.addView(button)
@@ -720,7 +783,7 @@ class MainActivity : Activity() {
   var snapshot = ""
   read.setOnClickListener {
    read.isEnabled = false
-   output.text = "Reading..."
+   output.text = L10n.text("reading")
    Thread {
     val result = StringBuilder()
     result.append("Captured: ").append(java.time.ZonedDateTime.now()).append("\n")
@@ -760,11 +823,11 @@ class MainActivity : Activity() {
    }.start()
   }
   copy.setOnClickListener {
-   if (snapshot.isEmpty()) notifyMessage("Read source first")
+   if (snapshot.isEmpty()) notifyMessage(L10n.text("read_first"))
    else {
     val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid sleep snapshot", snapshot))
-    notifyMessage("Snapshot copied")
+    notifyMessage(L10n.text("copied"))
    }
   }
   back.setOnClickListener { showJournal("sleep") }
@@ -772,46 +835,108 @@ class MainActivity : Activity() {
  }
  private fun showSettings() {
   val layout = page()
-  layout.addView(TextView(this).apply { text = "Settings"; textSize = 22f; setTextColor(currentSkin().foreground) })
+  layout.addView(TextView(this).apply { text = L10n.text("settings"); textSize = 22f; setTextColor(currentSkin().foreground) })
   fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText =
    EditText(this).apply {
     hint = label
     setText(value)
     inputType = type
+    setTextColor(currentSkin().foreground)
+    setHintTextColor((currentSkin().foreground and 0x00FFFFFF) or 0x99000000.toInt())
     setSingleLine(true)
     layout.addView(this)
    }
-  val host = field("Broker IP / hostname", prefs.getString("host", "").orEmpty())
-  val port = field("Port", prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
-  val user = field("Username", prefs.getString("user", "").orEmpty())
-  val pass = field("Password (visible during testing)", prefs.getString("password", "").orEmpty())
-  val device = field("Device ID", prefs.getString("device", "king").orEmpty())
-  val skinNames = arrayOf("Dark", "Light", "Forest", "Sunset")
-  val skinKeys = arrayOf("dark", "light", "forest", "sunset")
+  val host = field(L10n.text("host"), prefs.getString("host", "").orEmpty())
+  val port = field(L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
+  val user = field(L10n.text("username"), prefs.getString("user", "").orEmpty())
+  val pass = field(L10n.text("password"), prefs.getString("password", "").orEmpty())
+  val device = field(L10n.text("device_id"), prefs.getString("device", "king").orEmpty())
+  val skinNames = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky").map { L10n.text(it) }.toTypedArray()
+  val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   layout.addView(TextView(this).apply {
-   text = "Appearance"; textSize = 18f; setTextColor(currentSkin().foreground)
+   text = L10n.text("appearance"); textSize = 18f; setTextColor(currentSkin().foreground)
   })
   val skinChoice = Spinner(this)
-  skinChoice.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, skinNames)
+  val spinnerSkin = currentSkin()
+  skinChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, skinNames) {
+   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+    return super.getView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setPadding(12, 8, 12, 8)
+     }
+    }
+   }
+   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+    return super.getDropDownView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setBackgroundColor(spinnerSkin.button)
+      setPadding(16, 12, 16, 12)
+     }
+    }
+   }
+  }
   skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
   layout.addView(skinChoice)
-  val save = Button(this).apply { text = "Save settings" }
-  val back = Button(this).apply { text = "Back" }
-  val status = TextView(this)
+  layout.addView(TextView(this).apply {
+   text = L10n.text("language"); textSize = 18f; setTextColor(currentSkin().foreground)
+  })
+  val languageKeys = arrayOf("system", "ru", "en", "fr", "de", "lb", "it", "pt", "es")
+  val languageNames = arrayOf("System / Автоматически", "Русский", "English", "Français", "Deutsch", "Lëtzebuergesch", "Italiano", "Português", "Español")
+  val languageChoice = Spinner(this)
+  languageChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, languageNames) {
+   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
+    super.getView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply { setTextColor(spinnerSkin.foreground); setPadding(12, 8, 12, 8) }
+    }
+   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
+    super.getDropDownView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setBackgroundColor(spinnerSkin.button)
+      setPadding(16, 12, 16, 12)
+     }
+    }
+  }
+  languageChoice.setSelection(languageKeys.indexOf(prefs.getString("language", "system")).coerceAtLeast(0))
+  layout.addView(languageChoice)
+  val autoSync = CheckBox(this).apply {
+   text = L10n.text("auto_sync")
+   isChecked = prefs.getBoolean("auto", false)
+   setTextColor(currentSkin().foreground)
+  }
+  layout.addView(autoSync)
+  val interval = field(L10n.text("sync_interval"),
+   prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
+  val save = Button(this).apply { text = L10n.text("save_settings") }
+  val back = Button(this).apply { text = L10n.text("back") }
+  val status = TextView(this).apply { setTextColor(currentSkin().foreground) }
   layout.addView(save)
   layout.addView(back)
   layout.addView(status)
   save.setOnClickListener {
    val p = port.text.toString().toIntOrNull()
+   val intervalMinutes = interval.text.toString().toIntOrNull()
    val d = device.text.toString().trim()
    if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
+    intervalMinutes == null || intervalMinutes !in 1..60 ||
     !d.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = "Invalid host, port or device ID"
+    status.text = L10n.text("invalid_settings")
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", p.toString()).putString("user", user.text.toString())
      .putString("password", pass.text.toString()).putString("device", d)
-      .putString("skin", skinKeys[skinChoice.selectedItemPosition]).apply()
+      .putString("skin", skinKeys[skinChoice.selectedItemPosition])
+      .putString("language", languageKeys[languageChoice.selectedItemPosition])
+      .putInt("interval_minutes", intervalMinutes)
+      .putBoolean("auto", autoSync.isChecked).apply()
+    if (autoSync.isChecked) {
+     startForegroundService(Intent(this, SyncService::class.java))
+    } else {
+     stopService(Intent(this, SyncService::class.java))
+    }
+    L10n.init(this)
     showHome()
    }
   }

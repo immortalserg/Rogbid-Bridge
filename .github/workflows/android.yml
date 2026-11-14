@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [main]
+    branches: [main, feature/automatic-sleep-sync]
   pull_request:
   workflow_dispatch:
 jobs:
