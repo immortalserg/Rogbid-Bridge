@@ -185,7 +185,7 @@ class RogbidHistoryCard extends HTMLElement {
       this._kind === "oxygen" ? ["Date", "SpO₂"] :
       this._kind === "steps" ? ["Date", "Steps", "kcal", "km"] :
       ["Wake date", "Duration", "Deep", "Light", "REM", "Score"];
-    if (this._hass?.user?.is_admin) headings.push("Delete");
+    if (this._config.show_delete_buttons === true && this._hass?.user?.is_admin) headings.push("Delete");
     const tr = document.createElement("tr");
     for (const heading of headings) {
       const th = document.createElement("th");
@@ -209,7 +209,7 @@ class RogbidHistoryCard extends HTMLElement {
         td.textContent = value == null ? "—" : String(value);
         row.append(td);
       }
-      if (this._hass?.user?.is_admin) {
+      if (this._config.show_delete_buttons === true && this._hass?.user?.is_admin) {
         const cell = document.createElement("td");
         const button = document.createElement("button");
         button.textContent = "🗑";
@@ -437,6 +437,15 @@ class RogbidHistoryCardEditor extends HTMLElement {
     height.value=String(this._config.history_height||420);
     height.addEventListener("change",()=>this._update("history_height",Math.max(120,Math.min(1200,Number(height.value)||420))));
     add("History height (px)",height);
+    const deletion = document.createElement("input");
+    deletion.type = "checkbox";
+    deletion.checked = this._config.show_delete_buttons === true;
+    deletion.style.cssText = "margin-right:8px";
+    deletion.addEventListener("change", () => this._update("show_delete_buttons", deletion.checked));
+    const deletionLabel = document.createElement("label");
+    deletionLabel.style.cssText = "display:flex;align-items:center;margin-top:12px";
+    deletionLabel.append(deletion, document.createTextNode("Show delete buttons / Показывать удаление записей"));
+    this.append(deletionLabel);
     const mode=document.createElement("select");
     for(const [value,label] of [["table","Table"],["graph","Graph"]]){const option=document.createElement("option");
       option.value=value;option.textContent=label;mode.append(option);}
