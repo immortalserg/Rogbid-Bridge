@@ -2,7 +2,7 @@
 
 Independent Android smartwatch bridge for MQTT telemetry and historical activity synchronization. Not tied to Home Assistant.
 
-> **Status:** Early development; no APK released yet.
+> **Status:** Android 9 watch app, v0.6.0. Signed APK builds are produced by GitHub Actions.
 
 ## Target
 
@@ -27,9 +27,17 @@ adb shell 'content query --uri content://com.watchHealth.Walk/query --sort "date
 
 The provider uses `content://com.watchHealth.Walk/query`, backed by SQLite `database.db` / `health`. Columns: `date`, `steps`, `diatance` (firmware spelling), `kcal`, `long_time`, `targetsteps`.
 
-**Caveat:** Access from ADB shell does not establish access from an ordinary third-party APK. App permissions must be tested. Distance and calorie units remain unverified.
+**Caveat:** Access from ADB shell does not establish access from an ordinary third-party APK. App permissions must be tested. On the tested watch, the activity history displays calories converted to rounded kilocalories and distance converted from metres to kilometres (one decimal place).
 
-## Proposed MQTT topics
+## Current features
+
+- Pulse and SpO₂ measurements and local history
+- Steps, calories (kcal), and distance (km) history
+- Sleep archive, history, stage graph and diagnostic screen
+- Manual and automatic MQTT synchronization, Home Assistant MQTT Discovery
+- Nine color themes and eight interface languages: Russian, English, French, German, Luxembourgish, Italian, Portuguese, Spanish; automatic system language or manual selection
+
+## MQTT topics
 
 - `rogbid/<device_id>/state`: current readings
 - `rogbid/<device_id>/history/steps`: dated activity records
