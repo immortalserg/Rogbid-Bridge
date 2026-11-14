@@ -165,7 +165,7 @@ class MainActivity : Activity() {
   val port = prefs.getString("port", "1883")?.toIntOrNull()
   val id = prefs.getString("device", "king")?.trim().orEmpty()
   if (host.isEmpty() || port == null || port !in 1..65535 ||
-   !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("Configure MQTT in Settings")
+   !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException(L10n.text("configure_mqtt"))
   val topic = "rogbid/$id/measurements/" + (if (type == 21) "heart_rate" else "spo2")
   val client = MqttClient((if (port == 8883) "ssl" else "tcp") + "://$host:$port",
    "rogbid-measure-$id-" + System.currentTimeMillis(), MemoryPersistence())
@@ -232,7 +232,7 @@ class MainActivity : Activity() {
     publishMeasurement(type, heart, oxygen, time)
 
    } catch (e: Exception) {
-    runOnUiThread { notifyMessage((if (saved) "MQTT error: " else "Save error: ") + e.message) }
+    runOnUiThread { notifyMessage((if (saved) L10n.text("mqtt_error") else L10n.text("save_error")) + e.message) }
    }
   }.start()
  }
@@ -257,7 +257,7 @@ class MainActivity : Activity() {
   }
   val sensor = sensorManager.getDefaultSensor(type)
   if (sensor == null) {
-   notifyMessage("Sensor type $type is unavailable")
+   notifyMessage(L10n.text("sensor_unavailable").replace("%s", type.toString()))
    return
   }
   val generation = measurementGeneration
@@ -302,18 +302,18 @@ class MainActivity : Activity() {
   try {
    if (!sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
     stopMeasurement()
-    notifyMessage("Unable to register sensor $type")
+    notifyMessage(L10n.text("sensor_register").replace("%s", type.toString()))
     return
    }
   } catch (e: SecurityException) {
    stopMeasurement()
-   notifyMessage("Sensor permission denied: " + e.message)
+   notifyMessage(L10n.text("sensor_permission") + e.message)
    return
   }
   handler.postDelayed({
    if (generation == measurementGeneration) {
     stopMeasurement()
-    notifyMessage("Measurement timed out")
+    notifyMessage(L10n.text("measurement_timeout"))
    }
   }, 45000)
  }
@@ -322,7 +322,7 @@ class MainActivity : Activity() {
   if (requestCode == 1201) {
    if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
     beginMeasurement(pendingSensorType)
-   } else notifyMessage("Body sensors permission is required")
+   } else notifyMessage(L10n.text("body_permission"))
   }
  }
  private val prefs by lazy { getSharedPreferences("mqtt", MODE_PRIVATE) }
@@ -444,7 +444,7 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage("Configure MQTT in Settings")
+    notifyMessage(L10n.text("configure_mqtt"))
     return@setOnClickListener
    }
    history.isEnabled = false
@@ -456,10 +456,10 @@ class MainActivity : Activity() {
      val uri = Uri.parse("content://com.watchHealth.Walk/query")
      val cursor = contentResolver.query(uri,
       arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date ASC")
-      ?: throw IllegalStateException("History provider returned null")
+      ?: throw IllegalStateException(L10n.text("history_provider_empty"))
      cursor.use {
       val dateIndex = it.getColumnIndex("date")
-      if (dateIndex < 0) throw IllegalStateException("Missing date column")
+      if (dateIndex < 0) throw IllegalStateException(L10n.text("missing_date"))
       while (it.moveToNext()) {
        if (it.isNull(dateIndex)) continue
        val date = it.getString(dateIndex)?.trim().orEmpty()
@@ -473,7 +473,7 @@ class MainActivity : Activity() {
        records[date] = data
       }
      }
-     if (records.isEmpty()) throw IllegalStateException("No dated history records found")
+     if (records.isEmpty()) throw IllegalStateException(L10n.text("no_dated_history"))
      val login = prefs.getString("user", "").orEmpty()
      val password = prefs.getString("password", "").orEmpty()
      val scheme = if (number == 8883) "ssl" else "tcp"
@@ -496,13 +496,13 @@ class MainActivity : Activity() {
         })
        published++
       }
-      runOnUiThread { notifyMessage("History published: " + published + " day(s)") }
+      runOnUiThread { notifyMessage(L10n.text("history_published").replace("%s", published.toString())) }
      } finally {
       if (client.isConnected) client.disconnect()
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { notifyMessage("History error: " + e.message) }
+     runOnUiThread { notifyMessage(L10n.text("history_error") + e.message) }
     } finally {
      runOnUiThread {
       history.isEnabled = true
@@ -517,7 +517,7 @@ class MainActivity : Activity() {
    val id = prefs.getString("device", "king")?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage("Configure MQTT in Settings")
+    notifyMessage(L10n.text("configure_mqtt"))
     return@setOnClickListener
    }
    val login = prefs.getString("user", "").orEmpty()
@@ -632,13 +632,13 @@ class MainActivity : Activity() {
        qos = 1
        isRetained = true
       })
-      runOnUiThread { status.text = "Published " + topic + "\n" + data.toString() }
+      runOnUiThread { status.text = L10n.text("published") + topic + "\n" + data.toString() }
      } finally {
       if (client.isConnected) client.disconnect()
       client.close()
      }
     } catch (e: Exception) {
-     runOnUiThread { notifyMessage("MQTT error: " + e.message) }
+     runOnUiThread { notifyMessage(L10n.text("mqtt_error") + e.message) }
     } finally {
      runOnUiThread { button.isEnabled = true }
     }
@@ -656,7 +656,7 @@ class MainActivity : Activity() {
    sleepScreens().latest()
   } catch (e: Exception) {
    android.util.Log.e("RogbidSleep", "Sleep screen failed", e)
-   notifyMessage("Sleep screen error: " + (e.message ?: e.javaClass.simpleName))
+   notifyMessage(L10n.text("sleep_screen_error") + (e.message ?: e.javaClass.simpleName))
    showHome()
   }
  }
@@ -733,10 +733,10 @@ class MainActivity : Activity() {
      }
     }
    } catch (e: Exception) {
-    records.add("History unavailable: " + e.message)
+    records.add(L10n.text("history_unavailable") + e.message)
    }
    runOnUiThread {
-    if (records.isEmpty()) records.add("No history available")
+    if (records.isEmpty()) records.add(L10n.text("no_history"))
     for (record in records) entries.addView(TextView(this).apply {
      text = record; textSize = 16f
      setTextColor(skin.foreground)
@@ -752,12 +752,12 @@ class MainActivity : Activity() {
    text = L10n.text("sleep_diagnostics"); textSize = 21f; setTextColor(skin.foreground)
   })
   val hint = TextView(this).apply {
-   text = "Capture before and after opening the stock Sleep app. Compare IDs, times and all fields."
+   text = L10n.text("diagnostic_hint")
    textSize = 14f; setTextColor(skin.foreground)
   }
   layout.addView(hint)
   val output = TextView(this).apply {
-   text = "Tap Read source"; textSize = 13f; setTextColor(skin.foreground)
+   text = L10n.text("tap_read"); textSize = 13f; setTextColor(skin.foreground)
    setTextIsSelectable(true)
   }
   val read = Button(this).apply { text = L10n.text("read_source") }
@@ -771,7 +771,7 @@ class MainActivity : Activity() {
   var snapshot = ""
   read.setOnClickListener {
    read.isEnabled = false
-   output.text = "Reading..."
+   output.text = L10n.text("reading")
    Thread {
     val result = StringBuilder()
     result.append("Captured: ").append(java.time.ZonedDateTime.now()).append("\n")
@@ -811,11 +811,11 @@ class MainActivity : Activity() {
    }.start()
   }
   copy.setOnClickListener {
-   if (snapshot.isEmpty()) notifyMessage("Read source first")
+   if (snapshot.isEmpty()) notifyMessage(L10n.text("read_first"))
    else {
     val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid sleep snapshot", snapshot))
-    notifyMessage("Snapshot copied")
+    notifyMessage(L10n.text("copied"))
    }
   }
   back.setOnClickListener { showJournal("sleep") }
