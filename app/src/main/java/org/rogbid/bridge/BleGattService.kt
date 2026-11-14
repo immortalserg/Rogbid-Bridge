@@ -145,9 +145,19 @@ class BleGattService : Service() {
          page.put("record", record)
         } else page.put("done", true)
        }
-       synchronized(this@BleGattService) { response = page.toString() }
+       // Return fixed-size base64 chunks so the JSON reply fits small BLE MTUs.
+       val encoded = page.toString().toByteArray(Charsets.UTF_8)
+       val chunkOffset = request.optInt("offset", 0)
+       if (chunkOffset < 0 || chunkOffset > encoded.size || encoded.size > 262144)
+        throw IllegalArgumentException("Invalid sleep chunk offset or size")
+       val next = minOf(chunkOffset + 64, encoded.size)
+       val chunk = android.util.Base64.encodeToString(
+        encoded.copyOfRange(chunkOffset, next), android.util.Base64.NO_WRAP)
+       val envelope = JSONObject().put("type", "sleep_history_chunk")
+        .put("offset", chunkOffset).put("total", encoded.size).put("data", chunk)
+       synchronized(this@BleGattService) { response = envelope.toString() }
        status = BluetoothGatt.GATT_SUCCESS
-       Log.i(TAG, "GATT sleep_history after_id=$after")
+       Log.i(TAG, "GATT sleep_history after_id=$after offset=$chunkOffset total=${encoded.size}")
       } finally { repo.close() }
      } else if (request.optString("type") == "device_info") {
       val id = WatchIdentity.id(this@BleGattService).trim()
