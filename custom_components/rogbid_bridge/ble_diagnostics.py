@@ -146,8 +146,8 @@ class GattDiagnostics:
                     or not isinstance(measured_at, str)
                     or type(heart_rate) is not int or not 35 <= heart_rate <= 220):
                 raise ValueError("Invalid heart history record")
-            payload = {"kind": "heart", "id": f"ble-heart-{record_id}",
-                       "measured_at": measured_at, "heart_rate": heart_rate}
+            payload = {"kind": "heart", "id": f"heart:{record_id}",
+                       "measured_at": measured_at, "bpm": heart_rate}
             await self.hass.async_add_executor_job(
                 self.journal.insert, self.expected_device_id, "heart",
                 payload["id"], measured_at, payload,
