@@ -50,14 +50,20 @@ class RogbidHistoryCard extends HTMLElement {
     if (config.device_id && !/^[A-Za-z0-9_-]+$/.test(config.device_id)) {
       throw new Error("Rogbid Bridge card requires a valid device_id");
     }
+    const previousDevice = this._deviceId;
+    const previousKind = this._kind;
     this._config = config;
-    this._deviceId = config.device_id || null;
-    this._devices = [];
+    this._deviceId = config.device_id || previousDevice || null;
+    this._devices = this._devices || [];
     this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
     this._rows = [];
     this._loading = false;
     this._error = "";
     this._render();
+    if (this._hass && this.isConnected && this._deviceId &&
+        (previousKind !== this._kind || (config.device_id && previousDevice !== config.device_id))) {
+      this._load();
+    }
   }
 
   set hass(hass) {
@@ -401,6 +407,7 @@ class RogbidHistoryCardEditor extends HTMLElement {
     if (value !== null && value !== undefined) config[key] = value;
     else delete config[key];
     this._config = config;
+    this._render();
     this.dispatchEvent(new CustomEvent("config-changed", {
       detail: { config }, bubbles: true, composed: true
     }));
