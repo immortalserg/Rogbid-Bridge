@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Rogbid Bridge",
+        "description": "Enter the device ID configured in Rogbid Bridge on your watch.",
+        "data": {
+          "device_id": "MQTT device ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_device_id": "Use letters, numbers, underscores or hyphens only."
+    },
+    "abort": {
+      "already_configured": "This watch is already configured."
+    }
+  }
+}
