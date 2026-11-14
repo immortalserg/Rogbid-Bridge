@@ -168,6 +168,8 @@ class SyncService : Service() {
      qos = 1
      isRetained = true
     })
+   // Replay bounded local history on every sync; stable IDs deduplicate on HA.
+   HistoryPublisher.publish(this, client, id)
   } finally {
    if (client.isConnected) client.disconnect()
    client.close()
