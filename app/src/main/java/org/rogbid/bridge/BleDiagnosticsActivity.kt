@@ -2,6 +2,7 @@ package org.rogbid.bridge
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothGattServerCallback
 import android.content.pm.PackageManager
@@ -29,12 +30,24 @@ class BleDiagnosticsActivity : Activity() {
   })
   output = TextView(this).apply { textSize = 15f }
   val run = Button(this).apply { text = "Check BLE / Проверить BLE" }
+  val start = Button(this).apply { text = "Start BLE GATT / Включить BLE" }
+  val stop = Button(this).apply { text = "Stop BLE GATT / Выключить BLE" }
   val back = Button(this).apply { text = "Back / Назад" }
   column.addView(run)
+  column.addView(start)
+  column.addView(stop)
   column.addView(output)
   column.addView(back)
   setContentView(ScrollView(this).apply { addView(column) })
   run.setOnClickListener { checkCapabilities() }
+  start.setOnClickListener {
+   startService(Intent(this, BleGattService::class.java))
+   output.text = "BLE start requested. Check logcat tag WatchBridgeBLE for advertising result."
+  }
+  stop.setOnClickListener {
+   stopService(Intent(this, BleGattService::class.java))
+   output.text = "BLE service stop requested / BLE остановлен"
+  }
   back.setOnClickListener { finish() }
   checkCapabilities()
  }
