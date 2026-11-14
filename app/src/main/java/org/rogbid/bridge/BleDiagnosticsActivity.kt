@@ -105,3 +105,4 @@ class BleDiagnosticsActivity : Activity() {
    }
   }
  }
+}
