@@ -1,8 +1,8 @@
-# Rogbid Bridge
+# Watch Bridge
 
-Independent Android smartwatch bridge for MQTT telemetry and historical activity synchronization. Not tied to Home Assistant.
+Multi-device smartwatch bridge for MQTT telemetry and historical activity synchronization. Not tied to Home Assistant.
 
-> **Status:** Android 9 watch app, v0.6.0. Signed APK builds are produced by GitHub Actions.
+> **Status:** Rogbid Z10 Android 9 app v0.6.1; Wear OS support is planned. Signed APK builds are produced by GitHub Actions.
 
 ## Screenshots
 
@@ -14,9 +14,10 @@ Screenshots from the Rogbid Z10 smartwatch interface:
   <img src="img/screenshot4.png" alt="Rogbid Bridge screenshot 4" width="220" />
 </p>
 
-## Target
+## Supported devices
 
-- Rogbid Z10, Android 9 (device model `KING`)
+- Rogbid Z10, Android 9 (device model `KING`) — supported
+- Samsung Galaxy Watch4 and other Wear OS watches — planned, not yet supported
 - Kotlin Android app
 - MQTT over Wi-Fi
 - Consumers include Home Assistant, Node-RED and any MQTT subscriber
@@ -54,6 +55,10 @@ The provider uses `content://com.watchHealth.Walk/query`, backed by SQLite `data
 - `rogbid/<device_id>/status`: availability
 
 MQTT is a transport, not a historical database. Consumers must store history if needed; synchronization will include replay/deduplication.
+
+## Multi-watch architecture
+
+The repository will host device-specific applications sharing a common MQTT history protocol and one Home Assistant integration. The existing `rogbid_bridge` integration domain, MQTT topic prefix `rogbid/`, and Android package `org.rogbid.bridge` are retained for backwards compatibility. A future Wear OS app will have its own application ID and device adapters.
 
 ## Roadmap
 
