@@ -43,6 +43,19 @@ async def websocket_history(hass: HomeAssistant, connection, msg: dict) -> None:
     connection.send_result(msg["id"], {"records": rows})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "rogbid_bridge/devices"})
+@websocket_api.async_response
+async def websocket_devices(hass: HomeAssistant, connection, msg: dict) -> None:
+    """List configured watches for the history card and its visual editor."""
+    watches = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        device_id = entry.data.get(CONF_DEVICE_ID)
+        if device_id and entry.entry_id in hass.data.get(DOMAIN, {}):
+            watches.append({"device_id": device_id, "name": entry.title})
+    connection.send_result(msg["id"], {"devices": watches})
+
+
 def async_register(hass: HomeAssistant) -> None:
     """Register once, independently of the number of configured watches."""
     websocket_api.async_register_command(hass, websocket_history)
+    websocket_api.async_register_command(hass, websocket_devices)
