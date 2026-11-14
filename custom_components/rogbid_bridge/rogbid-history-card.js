@@ -4,6 +4,31 @@ const orderKinds = v => {
   const requested = Array.isArray(v) ? v : [];
   return [...new Set([...requested.filter(k=>KINDS.some(([id])=>id===k)),...KINDS.map(([id])=>id)])];
 };
+
+const formatRogbidDateTime = value => {
+  if (value == null || value === "") return "—";
+  const text = String(value).trim();
+  // Watch timestamps may be ISO-like, with or without a timezone.
+  const match = text.match(/^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})[T\s]+(\d{1,2}):(\d{2})/);
+  if (match) {
+    const [,year,month,day,hour,minute] = match;
+    return year+"."+month.padStart(2,"0")+"."+day.padStart(2,"0")+" "+hour.padStart(2,"0")+":"+minute;
+  }
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    const pad = n => String(n).padStart(2,"0");
+    return parsed.getFullYear()+"."+pad(parsed.getMonth()+1)+"."+pad(parsed.getDate())+
+      " "+pad(parsed.getHours())+":"+pad(parsed.getMinutes());
+  }
+  return text;
+};
+const formatRogbidMinutes = value => {
+  if (value == null || value === "") return "—";
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes < 0) return "—";
+  const rounded = Math.round(minutes);
+  return Math.floor(rounded/60)+" ч "+String(rounded%60).padStart(2,"0")+" мин";
+};
 class RogbidHistoryCard extends HTMLElement {
   static getConfigElement() { return document.createElement("rogbid-history-card-editor"); }
   static getStubConfig() { return { title: "Rogbid Bridge" }; }
@@ -171,11 +196,12 @@ class RogbidHistoryCard extends HTMLElement {
     table.append(thead);
     const tbody = document.createElement("tbody");
     for (const record of this._rows) {
-      const date = record.date || record.sleep_date || record.measured_at || "";
+      const rawDate = record.date || record.sleep_date || record.measured_at || "";
+      const date = this._kind === "heart" || this._kind === "oxygen" ? formatRogbidDateTime(rawDate) : rawDate;
       const values = this._kind === "heart" ? [date, record.bpm] :
         this._kind === "oxygen" ? [date, record.spo2] :
         this._kind === "steps" ? [date, record.steps, record.kcal == null ? "" : Math.round(Number(record.kcal) / 1000), record.diatance == null ? "" : (Number(record.diatance) / 1000).toFixed(1)] :
-        [date, record.duration_minutes, record.deep_minutes, record.light_minutes, record.fast_minutes, record.score];
+        [date, formatRogbidMinutes(record.duration_minutes), formatRogbidMinutes(record.deep_minutes), formatRogbidMinutes(record.light_minutes), formatRogbidMinutes(record.fast_minutes), record.score];
       const row = document.createElement("tr");
       for (const value of values) {
         const td = document.createElement("td");
