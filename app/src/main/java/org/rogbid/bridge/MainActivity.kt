@@ -850,14 +850,26 @@ class MainActivity : Activity() {
   val port = settingsField(layout, L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
   val user = settingsField(layout, L10n.text("username"), prefs.getString("user", "").orEmpty())
   val pass = settingsField(layout, L10n.text("password"), prefs.getString("password", "").orEmpty())
+  val autoSync = CheckBox(this).apply {
+   text = L10n.text("auto_sync")
+   isChecked = prefs.getBoolean("auto", false)
+   setTextColor(currentSkin().foreground)
+  }
+  layout.addView(autoSync)
+  val interval = settingsField(layout, L10n.text("sync_interval"),
+   prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
   layout.addView(settingsButton(L10n.text("save_settings")) {
    val number = port.text.toString().toIntOrNull()
-   if (number == null || number !in 1..65535) {
+   val minutes = interval.text.toString().toIntOrNull()
+   if (number == null || number !in 1..65535 || minutes == null || minutes !in 1..60) {
     notifyMessage(L10n.text("invalid_settings"))
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", number.toString()).putString("user", user.text.toString())
-     .putString("password", pass.text.toString()).apply()
+     .putString("password", pass.text.toString())
+     .putInt("interval_minutes", minutes).putBoolean("auto", autoSync.isChecked).apply()
+    if (autoSync.isChecked) startForegroundService(Intent(this, SyncService::class.java))
+    else stopService(Intent(this, SyncService::class.java))
     showSettings()
    }
   })
@@ -951,34 +963,18 @@ class MainActivity : Activity() {
   })
   val languageChoice = settingsSpinner(layout, languageLabels,
    languageKeys.indexOf(prefs.getString("language", "system")))
-  val autoSync = CheckBox(this).apply {
-   text = L10n.text("auto_sync")
-   isChecked = prefs.getBoolean("auto", false)
-   setTextColor(currentSkin().foreground)
-  }
-  layout.addView(autoSync)
   val allowDelete = CheckBox(this).apply {
    text = "Show history delete buttons / Показывать удаление записей"
    isChecked = prefs.getBoolean("show_delete_buttons", false)
    setTextColor(currentSkin().foreground)
   }
   layout.addView(allowDelete)
-  val interval = settingsField(layout, L10n.text("sync_interval"),
-   prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
   layout.addView(settingsButton(L10n.text("save_settings")) {
-   val minutes = interval.text.toString().toIntOrNull()
-   if (minutes == null || minutes !in 1..60) {
-    notifyMessage(L10n.text("invalid_settings"))
-   } else {
-    prefs.edit().putString("skin", skinKeys[skinChoice.selectedItemPosition])
+   prefs.edit().putString("skin", skinKeys[skinChoice.selectedItemPosition])
      .putString("language", languageKeys[languageChoice.selectedItemPosition])
-     .putInt("interval_minutes", minutes).putBoolean("auto", autoSync.isChecked)
      .putBoolean("show_delete_buttons", allowDelete.isChecked).apply()
-    if (autoSync.isChecked) startForegroundService(Intent(this, SyncService::class.java))
-    else stopService(Intent(this, SyncService::class.java))
-    L10n.init(this)
-    showSettings()
-   }
+   L10n.init(this)
+   showSettings()
   })
   layout.addView(settingsButton(L10n.text("back")) { showSettings() })
   show(layout)
