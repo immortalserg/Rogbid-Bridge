@@ -28,6 +28,17 @@ class GattDiagnostics:
             return
         if self.task is not None and not self.task.done():
             return
+        # Cached advertisements may be replayed after proxy scanner reconnects.
+        # They cannot be used to connect to rotating Android BLE addresses.
+        seen_at = getattr(service_info, "time", None)
+        if isinstance(seen_at, (int, float)):
+            age = time.monotonic() - seen_at
+            if age > 15:
+                _LOGGER.debug(
+                    "Watch Bridge GATT: skipping stale advertisement %s age=%.1fs",
+                    service_info.address, age,
+                )
+                return
         # Android may rotate random BLE addresses. Limit probes globally.
         if time.monotonic() - self.last_attempt < 120:
             return
