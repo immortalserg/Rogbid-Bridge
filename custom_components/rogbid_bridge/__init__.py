@@ -13,6 +13,25 @@ from .websocket import async_register as register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
+CARD_URL = "/rogbid_bridge/rogbid-history-card.js"
+
+
+async def _register_lovelace_resource(hass: HomeAssistant) -> None:
+    """Register the history card as a Lovelace module in storage mode."""
+    lovelace = hass.data.get("lovelace")
+    resources = getattr(lovelace, "resources", None)
+    if resources is None:
+        _LOGGER.info("Lovelace resources unavailable; card can be added manually")
+        return
+    try:
+        await resources.async_load()
+        if any(item.get("url", "").split("?")[0] == CARD_URL for item in resources.async_items()):
+            return
+        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        _LOGGER.info("Registered Rogbid history card in Lovelace resources")
+    except (AttributeError, ValueError, RuntimeError) as exc:
+        _LOGGER.warning("Could not register Rogbid history card automatically: %s", exc)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     device_id = entry.data[CONF_DEVICE_ID]
@@ -26,12 +45,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not devices.get("_card_registered"):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
-                "/rogbid_bridge/rogbid-history-card.js",
+                CARD_URL,
                 str(Path(__file__).with_name("rogbid-history-card.js")),
                 False,
             )
         ])
         devices["_card_registered"] = True
+        await _register_lovelace_resource(hass)
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
     async def on_state(msg):
