@@ -74,23 +74,23 @@ class SleepScreens(
   val repo = SleepRepository(activity)
   return try { repo.history() } finally { repo.close() }
  }
- private fun duration(minutes: Int): String = "${minutes / 60} ч ${minutes % 60} мин"
+ private fun duration(minutes: Int): String = "${minutes / 60} ${L10n.text("hours")} ${minutes % 60} ${L10n.text("minutes")}"
 
  fun latest() {
   val all = records()
   if (all.isEmpty()) {
-   val root = page("Сон")
-   root.addView(label("Пока нет сохранённых ночей. После завершения следующего цикла данные появятся здесь."))
-   addSpacedButton(root, "Назад") { onHome() }
-   addSpacedButton(root, "История сна") { history() }
+   val root = page(L10n.text("sleep"))
+   root.addView(label(L10n.text("no_sleep")))
+   addSpacedButton(root, L10n.text("back")) { onHome() }
+   addSpacedButton(root, L10n.text("sleep_history")) { history() }
   } else details(all.first(), false)
  }
 
  fun history() {
-  val root = page("История сна")
-  addSpacedButton(root, "Назад") { latest() }
+  val root = page(L10n.text("sleep_history"))
+  addSpacedButton(root, L10n.text("back")) { latest() }
   val all = records()
-  if (all.isEmpty()) root.addView(label("Сохранённых записей пока нет"))
+  if (all.isEmpty()) root.addView(label(L10n.text("no_records")))
   for (record in all) {
    val date = record.optString("sleep_date")
    val total = duration(record.optInt("duration_minutes"))
@@ -128,17 +128,17 @@ class SleepScreens(
 
  private fun details(record: JSONObject, fromHistory: Boolean) {
   val interval = record.optString("start_time") + "–" + record.optString("end_time")
-  val root = page("Сон — " + record.optString("sleep_date") + " — " + interval)
-  metricRow(root, "Всего", duration(record.optInt("duration_minutes")))
-  metricRow(root, "Глубокий", duration(record.optInt("deep_minutes")), DEEP_COLOR)
-  metricRow(root, "Лёгкий", duration(record.optInt("light_minutes")), LIGHT_COLOR)
-  metricRow(root, "Пробуждения", "—", AWAKE_COLOR)
+  val root = page(L10n.text("sleep") + " — " + record.optString("sleep_date") + " — " + interval)
+  metricRow(root, L10n.text("total"), duration(record.optInt("duration_minutes")))
+  metricRow(root, L10n.text("deep"), duration(record.optInt("deep_minutes")), DEEP_COLOR)
+  metricRow(root, L10n.text("light"), duration(record.optInt("light_minutes")), LIGHT_COLOR)
+  metricRow(root, L10n.text("awakenings"), "—", AWAKE_COLOR)
   val stages = try { JSONArray(record.optString("stages_json")) } catch (_: Exception) { JSONArray() }
   root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(90))
   })
-  addSpacedButton(root, "Посмотреть историю") { history() }
-  addSpacedButton(root, "Назад") { if (fromHistory) history() else onHome() }
+  addSpacedButton(root, L10n.text("view_history")) { history() }
+  addSpacedButton(root, L10n.text("back")) { if (fromHistory) history() else onHome() }
  }
 
  private class SleepGraph(
@@ -163,7 +163,7 @@ class SleepScreens(
    paint.color = textColor
    paint.textSize = 12f * resources.displayMetrics.scaledDensity
    if (stages.length() < 2) {
-    canvas.drawText("Нет данных для графика", left, height / 2f, paint)
+    canvas.drawText(L10n.text("no_graph"), left, height / 2f, paint)
     return
    }
    val timeline = mutableListOf<Pair<Int, Int>>()
