@@ -1,6 +1,7 @@
 package org.rogbid.bridge
 
 import java.util.Locale
+import android.content.Context
 
 /** UI translations; follows the Android system language, with English fallback. */
 object L10n {
@@ -53,7 +54,8 @@ object L10n {
    "lavender" to "Lavender",
    "mint" to "Mint",
    "cream" to "Cream",
-   "sky" to "Sky"
+   "sky" to "Sky",
+   "language" to "Language"
   ),
   "ru" to mapOf(
    "pulse" to "Пульс",
@@ -103,7 +105,8 @@ object L10n {
    "lavender" to "Лавандовая",
    "mint" to "Мятная",
    "cream" to "Кремовая",
-   "sky" to "Небесная"
+   "sky" to "Небесная",
+   "language" to "Язык"
   ),
   "fr" to mapOf(
    "pulse" to "Pouls",
@@ -153,7 +156,8 @@ object L10n {
    "lavender" to "Lavande",
    "mint" to "Menthe",
    "cream" to "Crème",
-   "sky" to "Ciel"
+   "sky" to "Ciel",
+   "language" to "Langue"
   ),
   "de" to mapOf(
    "pulse" to "Puls",
@@ -203,7 +207,8 @@ object L10n {
    "lavender" to "Lavendel",
    "mint" to "Minze",
    "cream" to "Creme",
-   "sky" to "Himmel"
+   "sky" to "Himmel",
+   "language" to "Sprache"
   ),
   "lb" to mapOf(
    "pulse" to "Puls",
@@ -253,7 +258,8 @@ object L10n {
    "lavender" to "Lavendel",
    "mint" to "Mënz",
    "cream" to "Crème",
-   "sky" to "Himmel"
+   "sky" to "Himmel",
+   "language" to "Sprooch"
   ),
   "it" to mapOf(
    "pulse" to "Battito",
@@ -303,7 +309,8 @@ object L10n {
    "lavender" to "Lavanda",
    "mint" to "Menta",
    "cream" to "Crema",
-   "sky" to "Cielo"
+   "sky" to "Cielo",
+   "language" to "Lingua"
   ),
   "pt" to mapOf(
    "pulse" to "Pulso",
@@ -353,7 +360,8 @@ object L10n {
    "lavender" to "Lavanda",
    "mint" to "Menta",
    "cream" to "Creme",
-   "sky" to "Céu"
+   "sky" to "Céu",
+   "language" to "Idioma"
   ),
   "es" to mapOf(
    "pulse" to "Pulso",
@@ -403,7 +411,8 @@ object L10n {
    "lavender" to "Lavanda",
    "mint" to "Menta",
    "cream" to "Crema",
-   "sky" to "Cielo"
+   "sky" to "Cielo",
+   "language" to "Idioma"
   )
  )
  private val messages = mapOf(
@@ -608,8 +617,13 @@ object L10n {
    "sync_notification" to "Sincronización MQTT y sueño activa"
   )
  )
+ @Volatile private var selectedLanguage: String = "system"
+ fun init(context: Context) {
+  selectedLanguage = context.getSharedPreferences("mqtt", Context.MODE_PRIVATE)
+   .getString("language", "system") ?: "system"
+ }
  fun text(key: String): String {
-  val language = Locale.getDefault().language.lowercase(Locale.ROOT)
+  val language = if (selectedLanguage == "system") Locale.getDefault().language.lowercase(Locale.ROOT) else selectedLanguage
   return translations[language]?.get(key) ?: messages[language]?.get(key) ?: translations["en"]?.get(key) ?: messages["en"]?.get(key) ?: key
  }
 }
