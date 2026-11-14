@@ -44,4 +44,12 @@ device_id: king
 title: Rogbid Z10 history
 ```
 
-Replace `king` with your configured device ID. The four tabs display stored pulse, SpO₂, steps and sleep records. The card displays journal tables; click a sleep session to view its stage timeline (deep/light/other). If no data appears, verify that the updated Android app from this development branch is installed and that the broker receives `rogbid/<device_id>/history/#` messages. **Do not install as a production integration yet.**
+Replace `king` with the automatically generated immutable ID displayed in the watch app settings (format `z10_` followed by 32 hexadecimal characters). The four tabs display stored pulse, SpO₂, steps and sleep records. The card displays journal tables; click a sleep session to view its stage timeline (deep/light/other). If no data appears, verify that the updated Android app from this development branch is installed and that the broker receives `rogbid/<device_id>/history/#` messages. **Do not install as a production integration yet.**
+
+## Multiple watches and migration
+
+Every installation of the Android app generates a random, persistent ID such as `z10_a81f...<32 hex characters total>`. All MQTT state, measurement, history and Discovery topics use that ID. Add each watch as a separate Rogbid Bridge config entry in HA; the integration stores each watch in its own SQLite journal file.
+
+**Migration warning:** upgrading an existing installation changes the old manually configured MQTT ID (often `king`) to the new generated identity. Old retained MQTT Discovery configs and retained states are not deleted automatically and may leave duplicate/stale entities. Remove old entities and retained configs after verifying the new watch identity. Avoid copying app data between watches, because that copies the persisted ID; a fresh installation must create its own identity. Factory resets or clearing app data will also generate a new identity and require reconfiguring HA.
+
+**Known limitation:** the watch app still publishes MQTT Discovery sensors as well as the new integration's native sensors; these may appear as duplicate entities until Discovery publication is retired or made optional. Do not merge the development branch until this is addressed.
