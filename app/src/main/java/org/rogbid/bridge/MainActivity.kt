@@ -70,6 +70,7 @@ class MainActivity : Activity() {
  private fun styleButton(button: Button, skin: Skin) {
   button.setTextColor(skin.foreground)
   button.isAllCaps = false
+  button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
   val radius = 18f * resources.displayMetrics.density
   val shape = GradientDrawable().apply {
    setColor(skin.button)
@@ -141,10 +142,10 @@ class MainActivity : Activity() {
     val saved = try { repo.latest() } finally { repo.close() }
     if (saved != null) {
      val mins = saved.optInt("duration_minutes")
-     if (mins > 0) sleep = "${mins / 60}h ${mins % 60}m"
+     if (mins > 0) sleep = "${mins / 60}${L10n.text("hours")} ${mins % 60}${L10n.text("minutes")}"
     } else {
      SleepCollector(this).read()?.let {
-      sleep = "${it.duration / 60}h ${it.duration % 60}m"
+      sleep = "${it.duration / 60}${L10n.text("hours")} ${it.duration % 60}${L10n.text("minutes")}"
      }
     }
    } catch (e: Exception) {
@@ -381,7 +382,8 @@ class MainActivity : Activity() {
    val caption = TextView(this).apply {
     text = "$icon  $label"; textSize = 15f; gravity = Gravity.CENTER
     setTextColor(skin.accent)
-    setSingleLine(true)
+    setMaxLines(2)
+    setAutoSizeTextTypeUniformWithConfiguration(10, 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
    }
    val value = TextView(this).apply {
     text = "—"; textSize = 25f; gravity = Gravity.CENTER
@@ -727,7 +729,7 @@ class MainActivity : Activity() {
       while (cursor.moveToNext() && records.size < 100) {
        val hh = value("sumHH")?.toIntOrNull()
        val mm = value("sumMM")?.toIntOrNull()
-       val duration = if (hh != null && mm != null) "${hh}h ${mm}m" else "—"
+       val duration = if (hh != null && mm != null) "${hh}${L10n.text("hours")} ${mm}${L10n.text("minutes")}" else "—"
        records.add((value("sleeptime") ?: value("_id") ?: L10n.text("sleep")) + "    " + duration)
       }
      }
