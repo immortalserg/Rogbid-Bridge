@@ -30,6 +30,32 @@ class Journal:
                 PRIMARY KEY (device_id, kind, record_id)
             )""")
 
+    def get_sync_cursor(self, device_id: str, kind: str) -> int:
+        """Last durably processed source record ID for a BLE history stream."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sync_cursors (
+                device_id TEXT NOT NULL, kind TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device_id, kind)
+            )""")
+            row = db.execute(
+                "SELECT last_id FROM sync_cursors WHERE device_id=? AND kind=?",
+                (device_id, kind),
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+    def save_sync_cursor(self, device_id: str, kind: str, last_id: int) -> None:
+        """Advance cursor monotonically only after the record is persisted."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS sync_cursors (
+                device_id TEXT NOT NULL, kind TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device_id, kind)
+            )""")
+            db.execute(
+                """INSERT INTO sync_cursors (device_id, kind, last_id) VALUES (?, ?, ?)
+                ON CONFLICT(device_id, kind) DO UPDATE SET last_id=MAX(last_id, excluded.last_id)""",
+                (device_id, kind, last_id),
+            )
+
     def insert(self, device_id: str, kind: str, record_id: str, measured_at: str, payload: dict) -> bool:
         with sqlite3.connect(self.path) as db:
             if db.execute(
