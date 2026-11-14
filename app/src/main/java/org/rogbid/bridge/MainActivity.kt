@@ -70,7 +70,9 @@ class MainActivity : Activity() {
  private fun styleButton(button: Button, skin: Skin) {
   button.setTextColor(skin.foreground)
   button.isAllCaps = false
-  button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+  if (button.text.toString() != "♥" && button.text.toString() != "O₂") {
+   button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+  }
   val radius = 18f * resources.displayMetrics.density
   val shape = GradientDrawable().apply {
    setColor(skin.button)
@@ -341,6 +343,7 @@ class MainActivity : Activity() {
  }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  L10n.init(this)
   if (prefs.getBoolean("auto", false)) {
    startForegroundService(Intent(this, SyncService::class.java))
   }
@@ -869,6 +872,28 @@ class MainActivity : Activity() {
   }
   skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
   layout.addView(skinChoice)
+  layout.addView(TextView(this).apply {
+   text = L10n.text("language"); textSize = 18f; setTextColor(currentSkin().foreground)
+  })
+  val languageKeys = arrayOf("system", "ru", "en", "fr", "de", "lb", "it", "pt", "es")
+  val languageNames = arrayOf("System / Автоматически", "Русский", "English", "Français", "Deutsch", "Lëtzebuergesch", "Italiano", "Português", "Español")
+  val languageChoice = Spinner(this)
+  languageChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, languageNames) {
+   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
+    super.getView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply { setTextColor(spinnerSkin.foreground); setPadding(12, 8, 12, 8) }
+    }
+   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
+    super.getDropDownView(position, convertView, parent).also { view ->
+     (view as? TextView)?.apply {
+      setTextColor(spinnerSkin.foreground)
+      setBackgroundColor(spinnerSkin.button)
+      setPadding(16, 12, 16, 12)
+     }
+    }
+  }
+  languageChoice.setSelection(languageKeys.indexOf(prefs.getString("language", "system")).coerceAtLeast(0))
+  layout.addView(languageChoice)
   val autoSync = CheckBox(this).apply {
    text = L10n.text("auto_sync")
    isChecked = prefs.getBoolean("auto", false)
@@ -896,6 +921,7 @@ class MainActivity : Activity() {
      .putString("port", p.toString()).putString("user", user.text.toString())
      .putString("password", pass.text.toString()).putString("device", d)
       .putString("skin", skinKeys[skinChoice.selectedItemPosition])
+      .putString("language", languageKeys[languageChoice.selectedItemPosition])
       .putInt("interval_minutes", intervalMinutes)
       .putBoolean("auto", autoSync.isChecked).apply()
     if (autoSync.isChecked) {
@@ -903,6 +929,7 @@ class MainActivity : Activity() {
     } else {
      stopService(Intent(this, SyncService::class.java))
     }
+    L10n.init(this)
     showHome()
    }
   }
