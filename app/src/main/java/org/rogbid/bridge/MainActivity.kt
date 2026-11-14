@@ -357,6 +357,14 @@ class MainActivity : Activity() {
   val skin = currentSkin()
   val layout = page()
   val density = resources.displayMetrics.density
+  layout.addView(TextView(this).apply {
+   text = "Watch Bridge"
+   textSize = 22f
+   typeface = Typeface.DEFAULT_BOLD
+   gravity = Gravity.CENTER
+   setTextColor(skin.foreground)
+   setPadding(0, (4 * density).toInt(), 0, (10 * density).toInt())
+  }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
   val measurementRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val heartButton = Button(this).apply { text = "♥"; textSize = 34f; gravity = Gravity.CENTER }
   val oxygenButton = Button(this).apply { text = "O₂"; textSize = 32f; gravity = Gravity.CENTER }
@@ -695,7 +703,33 @@ class MainActivity : Activity() {
   layout.addView(settingsButton(L10n.text("appearance") + " / " + L10n.text("settings")) {
    showAppSettings()
   })
+  layout.addView(settingsButton(
+   "О приложении / About"
+  ) { showAbout() })
   layout.addView(settingsButton(L10n.text("back")) { showHome() })
+  show(layout)
+ }
+
+ private fun showAbout() {
+  val layout = page()
+  settingsTitle(layout, "Watch Bridge")
+  fun line(value: String, size: Float = 16f, bold: Boolean = false) {
+   layout.addView(TextView(this).apply {
+    text = value
+    textSize = size
+    setTextColor(currentSkin().foreground)
+    if (bold) typeface = Typeface.DEFAULT_BOLD
+    setPadding(0, 8, 0, 8)
+   })
+  }
+  line("Kusheev Sergei", 18f, true)
+  line("Watch Bridge — приложение для умных часов Rogbid, собирающее данные о пульсе, SpO₂, шагах и сне и передающее их в Home Assistant через MQTT или Bluetooth BLE.")
+  line("GitHub: github.com/immortalserg/Watch-bridge", 14f)
+  layout.addView(settingsButton("GitHub") {
+   startActivity(Intent(Intent.ACTION_VIEW,
+    Uri.parse("https://github.com/immortalserg/Watch-bridge")))
+  })
+  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
   show(layout)
  }
 
