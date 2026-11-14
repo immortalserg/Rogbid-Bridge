@@ -59,6 +59,11 @@ class SleepScreens(
   }
   setOnClickListener { action() }
  }
+ private fun addSpacedButton(root: LinearLayout, title: String, action: () -> Unit) {
+  root.addView(button(title, action), LinearLayout.LayoutParams(-1, -2).apply {
+   topMargin = dp(8)
+  })
+ }
  private fun label(value: String, size: Float = 15f): TextView = TextView(activity).apply {
   text = value
   textSize = size
@@ -76,26 +81,21 @@ class SleepScreens(
   if (all.isEmpty()) {
    val root = page("Сон")
    root.addView(label("Пока нет сохранённых ночей. После завершения следующего цикла данные появятся здесь."))
-   root.addView(button("История сна") { history() })
-   root.addView(button("Назад") { onHome() })
+   addSpacedButton(root, "Назад") { onHome() }
+   addSpacedButton(root, "История сна") { history() }
   } else details(all.first(), false)
  }
 
  fun history() {
   val root = page("История сна")
-  root.addView(label("Дата | Всего | Глубокий | Лёгкий | Пробуждения", 12f))
+  addSpacedButton(root, "Назад") { latest() }
   val all = records()
   if (all.isEmpty()) root.addView(label("Сохранённых записей пока нет"))
   for (record in all) {
    val date = record.optString("sleep_date")
    val total = duration(record.optInt("duration_minutes"))
-   val deep = duration(record.optInt("deep_minutes"))
-   val light = duration(record.optInt("light_minutes"))
-   val awakenings = wakeCount(record.optString("stages_json"))
-   root.addView(label("$date  •  $total\nГлубокий: $deep  •  Лёгкий: $light\nПробуждения: $awakenings", 14f))
-   root.addView(button("График сна — $date") { details(record, true) })
+   addSpacedButton(root, "$date — $total") { details(record, true) }
   }
-  root.addView(button("Назад") { latest() })
  }
 
  private fun wakeCount(raw: String): String {
@@ -137,8 +137,8 @@ class SleepScreens(
   root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(90))
   })
-  root.addView(button("Посмотреть историю") { history() })
-  root.addView(button("Назад") { if (fromHistory) history() else onHome() })
+  addSpacedButton(root, "Посмотреть историю") { history() }
+  addSpacedButton(root, "Назад") { if (fromHistory) history() else onHome() }
  }
 
  private class SleepGraph(
