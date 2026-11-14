@@ -19,10 +19,11 @@ STREAM_UUID = "d312a003-7a7b-4e72-9e5b-a21b3471a001"
 class GattDiagnostics:
     """Probe one advertisement at a time without interrupting MQTT transport."""
 
-    def __init__(self, hass, expected_device_id, journal):
+    def __init__(self, hass, expected_device_id, journal, on_record=None):
         self.hass = hass
         self.expected_device_id = expected_device_id
         self.journal = journal
+        self.on_record = on_record
         self.task = None
         self.last_attempt = 0.0
 
@@ -238,6 +239,8 @@ class GattDiagnostics:
                 self.journal.insert, self.expected_device_id, kind,
                 payload["id"], measured_at, payload,
             )
+            if self.on_record is not None:
+                self.on_record(kind, payload)
             if kind == "steps":
                 await self.hass.async_add_executor_job(
                     self.journal.save_steps_cursor, self.expected_device_id, cursor_value

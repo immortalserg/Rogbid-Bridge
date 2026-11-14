@@ -17,6 +17,27 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 CARD_URL = "/rogbid_bridge/rogbid-history-card.js"
 
+def sensor_values(kind, record):
+    """Convert stored measurements into HA sensor fields."""
+    if kind == "heart":
+        values = {"heart_rate": record.get("heart_rate", record.get("bpm"))}
+    elif kind == "oxygen":
+        values = {"spo2": record.get("spo2")}
+    elif kind == "steps":
+        values = {key: record.get(key) for key in ("steps", "kcal", "diatance")}
+    elif kind == "sleep":
+        values = {
+            "sleep_duration": record.get("duration_minutes", record.get("sleep_duration")),
+            "sleep_deep": record.get("deep_minutes", record.get("sleep_deep")),
+            "sleep_light": record.get("light_minutes", record.get("sleep_light")),
+            "sleep_fast": record.get("fast_minutes", record.get("rem_minutes", record.get("sleep_fast"))),
+        }
+    else:
+        return {}
+    return {key: value for key, value in values.items()
+            if type(value) in (int, float) and value >= 0}
+
+
 
 async def _register_lovelace_resource(hass: HomeAssistant) -> None:
     """Register the history card as a Lovelace module in storage mode."""
@@ -40,6 +61,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     journal = Journal(hass.config.path(".storage", "rogbid_bridge", f"{device_id}.sqlite3"))
     await hass.async_add_executor_job(journal.initialize)
     state = {}
+    # Restore last saved values before registering entities.
+    for history_kind in ("heart", "oxygen", "steps", "sleep"):
+        latest = await hass.async_add_executor_job(journal.recent, device_id, history_kind, 1)
+        if latest:
+            state.update(sensor_values(history_kind, latest[0]))
     devices = hass.data.setdefault(DOMAIN, {})
     if not devices.get("_websocket_registered"):
         register_websocket(hass)
@@ -56,7 +82,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _register_lovelace_resource(hass)
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
-    gatt_diagnostics = GattDiagnostics(hass, device_id, journal)
+    def on_ble_record(kind, record):
+        values = sensor_values(kind, record)
+        if values:
+            state.update(values)
+            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update")
+
+    gatt_diagnostics = GattDiagnostics(hass, device_id, journal, on_record=on_ble_record)
     entry.async_on_unload(gatt_diagnostics.close)
 
     # Diagnostic-only: advertisements are forwarded by ESPHome Bluetooth Proxy.
@@ -104,7 +136,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return
             if len(record_id) > 200 or len(measured_at) > 64:
                 return
-            await hass.async_add_executor_job(journal.insert, device_id, kind, record_id, measured_at, payload)
+            inserted = await hass.async_add_executor_job(
+                journal.insert, device_id, kind, record_id, measured_at, payload
+            )
+            if inserted:
+                on_ble_record(kind, payload)
         except (KeyError, TypeError, ValueError):
             _LOGGER.warning("Invalid history payload for Rogbid %s", device_id)
 
