@@ -295,7 +295,7 @@ class RogbidHistoryCard extends HTMLElement {
     const points = this._rows.map((r,i)=>({
       x:Date.parse(r.measured_at||r.date||r.sleep_date||""),
       y:Number(r[metric]) / scale, label:String(r.measured_at||r.date||r.sleep_date||i),
-      valid:r[metric]!==null && r[metric]!==undefined && r[metric]!==""
+      valid:r[metric]!==null && r[metric]!==undefined && r[metric]!=="" && Number.isFinite(Number(r[metric]))
     })).filter(p=>p.valid && Number.isFinite(p.y));
     if (!points.length) { area.textContent=rogbidT(this._config,this._hass,"noNumeric"); return; }
     if (points.some(p=>!Number.isFinite(p.x))) points.reverse().forEach((p,i)=>p.x=i);
