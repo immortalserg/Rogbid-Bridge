@@ -908,6 +908,10 @@ class MainActivity : Activity() {
   }
   languageChoice.setSelection(languageKeys.indexOf(prefs.getString("language", "system")).coerceAtLeast(0))
   layout.addView(languageChoice)
+  val bleDiagnostics = Button(this).apply { text = "Bluetooth BLE — диагностика / Diagnostics" }
+  styleButton(bleDiagnostics, currentSkin())
+  bleDiagnostics.setOnClickListener { startActivity(Intent(this, BleDiagnosticsActivity::class.java)) }
+  layout.addView(bleDiagnostics)
   val autoSync = CheckBox(this).apply {
    text = L10n.text("auto_sync")
    isChecked = prefs.getBoolean("auto", false)

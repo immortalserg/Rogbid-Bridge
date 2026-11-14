@@ -2,7 +2,8 @@
 import json
 import logging
 from pathlib import Path
-from homeassistant.components import mqtt
+from homeassistant.components import mqtt, bluetooth
+from homeassistant.components.bluetooth import BluetoothScanningMode
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -53,6 +54,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         devices["_card_registered"] = True
         await _register_lovelace_resource(hass)
     devices[entry.entry_id] = {"state": state, "journal": journal}
+
+    # Diagnostic-only: advertisements are forwarded by ESPHome Bluetooth Proxy.
+    def on_ble_advertisement(service_info, change):
+        _LOGGER.warning(
+            "Watch Bridge BLE discovered: address=%s name=%s rssi=%s source=%s connectable=%s uuids=%s change=%s",
+            service_info.address, service_info.name, service_info.rssi,
+            service_info.source, service_info.connectable,
+            service_info.service_uuids, change,
+        )
+
+    unsub_ble = bluetooth.async_register_callback(
+        hass,
+        on_ble_advertisement,
+        {"service_uuid": "d312a001-7a7b-4e72-9e5b-a21b3471a001"},
+        BluetoothScanningMode.ACTIVE,
+    )
+    entry.async_on_unload(unsub_ble)
+
 
     async def on_state(msg):
         try:
