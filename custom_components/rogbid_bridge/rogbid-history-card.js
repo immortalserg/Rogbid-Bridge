@@ -5,6 +5,19 @@ const orderKinds = v => {
   return [...new Set([...requested.filter(k=>KINDS.some(([id])=>id===k)),...KINDS.map(([id])=>id)])];
 };
 
+
+const ROGBID_TRANSLATIONS = {"en":{"heart":"Pulse","oxygen":"Oxygen","steps":"Steps","sleep":"Sleep","date":"Date","wakeDate":"Wake date","duration":"Duration","deep":"Deep","light":"Light","score":"Score","delete":"Delete","loading":"Loading…","empty":"No records yet","noWatch":"No watches configured","showTitle":"Show title","sections":"Visible sections","order":"Button order","limit":"History records (1–500)","height":"History height (px)","display":"History display","table":"Table","graph":"Graph","showDelete":"Show delete buttons","language":"Language","haLanguage":"Home Assistant language","autoWatch":"Automatic watch","cardTitle":"Card title","noNumeric":"No numeric data","noStages":"No sleep stages available","invalidStages":"No valid stage timeline","other":"Other / end","refresh":"Refresh history","confirmDelete":"Delete record from Home Assistant? It will remain on the watch.","deleteError":"Could not delete record","watch":"Watch"},"ru":{"heart":"Пульс","oxygen":"Кислород","steps":"Шаги","sleep":"Сон","date":"Дата","wakeDate":"Дата пробуждения","duration":"Продолжительность","deep":"Глубокий","light":"Лёгкий","score":"Оценка","delete":"Удалить","loading":"Загрузка…","empty":"Записей пока нет","noWatch":"Часы не настроены","showTitle":"Показывать заголовок","sections":"Отображаемые разделы","order":"Порядок кнопок","limit":"Количество записей (1–500)","height":"Высота истории (пикс.)","display":"Отображение истории","table":"Таблица","graph":"График","showDelete":"Показывать кнопки удаления","language":"Язык","haLanguage":"Язык Home Assistant","autoWatch":"Автоматический выбор часов","cardTitle":"Заголовок карточки","noNumeric":"Нет числовых данных","noStages":"Нет данных о фазах сна","invalidStages":"Некорректная шкала фаз сна","other":"Другое / конец","refresh":"Обновить историю","confirmDelete":"Удалить запись из Home Assistant? На часах она останется.","deleteError":"Не удалось удалить запись","watch":"Часы"},"fr":{"heart":"Pouls","oxygen":"Oxygène","steps":"Pas","sleep":"Sommeil","date":"Date","wakeDate":"Date de réveil","duration":"Durée","deep":"Profond","light":"Léger","score":"Score","delete":"Supprimer","loading":"Chargement…","empty":"Aucune donnée","noWatch":"Aucune montre configurée","showTitle":"Afficher le titre","sections":"Sections visibles","order":"Ordre des boutons","limit":"Enregistrements (1–500)","height":"Hauteur (px)","display":"Affichage de l'historique","table":"Tableau","graph":"Graphique","showDelete":"Afficher les boutons de suppression","language":"Langue","haLanguage":"Langue de Home Assistant","autoWatch":"Montre automatique","cardTitle":"Titre de la carte","noNumeric":"Aucune donnée numérique","noStages":"Aucune phase de sommeil","invalidStages":"Chronologie invalide","other":"Autre / fin","refresh":"Actualiser","confirmDelete":"Supprimer de Home Assistant ? La montre conserve cette donnée.","deleteError":"Suppression impossible","watch":"Montre"},"de":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schritte","sleep":"Schlaf","date":"Datum","wakeDate":"Aufwachdatum","duration":"Dauer","deep":"Tief","light":"Leicht","score":"Bewertung","delete":"Löschen","loading":"Laden…","empty":"Keine Einträge","noWatch":"Keine Uhr eingerichtet","showTitle":"Titel anzeigen","sections":"Sichtbare Bereiche","order":"Schaltflächenreihenfolge","limit":"Einträge (1–500)","height":"Höhe (px)","display":"Verlauf anzeigen","table":"Tabelle","graph":"Diagramm","showDelete":"Löschtasten anzeigen","language":"Sprache","haLanguage":"Home Assistant-Sprache","autoWatch":"Uhr automatisch","cardTitle":"Kartentitel","noNumeric":"Keine Zahlenwerte","noStages":"Keine Schlafphasen","invalidStages":"Ungültiger Verlauf","other":"Andere / Ende","refresh":"Aktualisieren","confirmDelete":"Eintrag aus Home Assistant löschen? Auf der Uhr bleibt er erhalten.","deleteError":"Löschen fehlgeschlagen","watch":"Uhr"},"lb":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schrëtt","sleep":"Schlof","date":"Datum","wakeDate":"Erwächen","duration":"Dauer","deep":"Déif","light":"Liicht","score":"Bewäertung","delete":"Läschen","loading":"Lueden…","empty":"Keng Donnéeën","noWatch":"Keng Auer ageriicht","showTitle":"Titel weisen","sections":"Siichtbar Beräicher","order":"Reiefolleg","limit":"Entréeën (1–500)","height":"Héicht (px)","display":"Geschicht uweisen","table":"Tabell","graph":"Grafik","showDelete":"Läschknäppercher weisen","language":"Sprooch","haLanguage":"Home Assistant-Sprooch","autoWatch":"Automatesch Auer","cardTitle":"Kaartentitel","noNumeric":"Keng numeresch Donnéeën","noStages":"Keng Schlofphasen","invalidStages":"Ongëlteg Zäitlinn","other":"Aner / Enn","refresh":"Aktualiséieren","confirmDelete":"Entrée aus Home Assistant läschen? Op der Auer bleift se.","deleteError":"Läschen net méiglech","watch":"Auer"},"it":{"heart":"Battito","oxygen":"Ossigeno","steps":"Passi","sleep":"Sonno","date":"Data","wakeDate":"Risveglio","duration":"Durata","deep":"Profondo","light":"Leggero","score":"Punteggio","delete":"Elimina","loading":"Caricamento…","empty":"Nessun dato","noWatch":"Nessun orologio configurato","showTitle":"Mostra titolo","sections":"Sezioni visibili","order":"Ordine pulsanti","limit":"Record (1–500)","height":"Altezza (px)","display":"Visualizzazione","table":"Tabella","graph":"Grafico","showDelete":"Mostra pulsanti elimina","language":"Lingua","haLanguage":"Lingua Home Assistant","autoWatch":"Orologio automatico","cardTitle":"Titolo scheda","noNumeric":"Nessun dato numerico","noStages":"Fasi del sonno assenti","invalidStages":"Sequenza non valida","other":"Altro / fine","refresh":"Aggiorna","confirmDelete":"Eliminare da Home Assistant? Resterà sull'orologio.","deleteError":"Eliminazione non riuscita","watch":"Orologio"},"pt":{"heart":"Pulso","oxygen":"Oxigénio","steps":"Passos","sleep":"Sono","date":"Data","wakeDate":"Despertar","duration":"Duração","deep":"Profundo","light":"Leve","score":"Pontuação","delete":"Eliminar","loading":"A carregar…","empty":"Sem registos","noWatch":"Sem relógio configurado","showTitle":"Mostrar título","sections":"Secções visíveis","order":"Ordem dos botões","limit":"Registos (1–500)","height":"Altura (px)","display":"Visualização","table":"Tabela","graph":"Gráfico","showDelete":"Mostrar botões de eliminação","language":"Idioma","haLanguage":"Idioma do Home Assistant","autoWatch":"Relógio automático","cardTitle":"Título do cartão","noNumeric":"Sem dados numéricos","noStages":"Sem fases de sono","invalidStages":"Cronologia inválida","other":"Outro / fim","refresh":"Atualizar","confirmDelete":"Eliminar do Home Assistant? Permanecerá no relógio.","deleteError":"Erro ao eliminar","watch":"Relógio"},"es":{"heart":"Pulso","oxygen":"Oxígeno","steps":"Pasos","sleep":"Sueño","date":"Fecha","wakeDate":"Despertar","duration":"Duración","deep":"Profundo","light":"Ligero","score":"Puntuación","delete":"Eliminar","loading":"Cargando…","empty":"Sin registros","noWatch":"Sin relojes configurados","showTitle":"Mostrar título","sections":"Secciones visibles","order":"Orden de botones","limit":"Registros (1–500)","height":"Altura (px)","display":"Visualización","table":"Tabla","graph":"Gráfico","showDelete":"Mostrar botones de eliminación","language":"Idioma","haLanguage":"Idioma de Home Assistant","autoWatch":"Reloj automático","cardTitle":"Título de tarjeta","noNumeric":"Sin datos numéricos","noStages":"Sin fases de sueño","invalidStages":"Cronología no válida","other":"Otro / fin","refresh":"Actualizar","confirmDelete":"¿Eliminar de Home Assistant? Permanecerá en el reloj.","deleteError":"Error al eliminar","watch":"Reloj"}};
+const rogbidLang = (config,hass) => {
+  const raw = config?.language && config.language !== "auto" ? config.language :
+    (hass?.locale?.language || hass?.language || "en");
+  const key = String(raw).toLowerCase().split(/[-_]/)[0];
+  return ROGBID_TRANSLATIONS[key] ? key : "en";
+};
+const rogbidT = (config,hass,key) =>
+  ROGBID_TRANSLATIONS[rogbidLang(config,hass)][key] || ROGBID_TRANSLATIONS.en[key] || key;
+const visibleKinds = config => orderKinds(config?.button_order).filter(k =>
+  !Array.isArray(config?.hidden_sections) || !config.hidden_sections.includes(k));
+
 const formatRogbidDateTime = value => {
   if (value == null || value === "") return "—";
   const text = String(value).trim();
@@ -22,12 +35,12 @@ const formatRogbidDateTime = value => {
   }
   return text;
 };
-const formatRogbidMinutes = value => {
+const formatRogbidMinutes = (value, language = "en") => {
   if (value == null || value === "") return "—";
   const minutes = Number(value);
   if (!Number.isFinite(minutes) || minutes < 0) return "—";
   const rounded = Math.round(minutes);
-  return Math.floor(rounded/60)+" ч "+String(rounded%60).padStart(2,"0")+" мин";
+  return language === "ru" ? Math.floor(rounded/60)+" ч "+String(rounded%60).padStart(2,"0")+" мин" : Math.floor(rounded/60)+" h "+String(rounded%60).padStart(2,"0")+" min";
 };
 class RogbidHistoryCard extends HTMLElement {
   static getConfigElement() { return document.createElement("rogbid-history-card-editor"); }
@@ -40,7 +53,7 @@ class RogbidHistoryCard extends HTMLElement {
     this._config = config;
     this._deviceId = config.device_id || null;
     this._devices = [];
-    this._kind = this._kind || orderKinds(config.button_order)[0];
+    this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
     this._rows = [];
     this._loading = false;
     this._error = "";
@@ -48,7 +61,9 @@ class RogbidHistoryCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const previousLanguage = rogbidLang(this._config,this._hass);
     this._hass = hass;
+    if (this._config && previousLanguage !== rogbidLang(this._config,hass)) this._render();
     if (this.isConnected && !this._loaded) {
       this._loaded = true;
       this._initialize();
@@ -78,7 +93,7 @@ class RogbidHistoryCard extends HTMLElement {
   }
 
   async _load() {
-    if (!this._hass || !this._deviceId) return;
+    if (!this._hass || !this._deviceId || !this._kind) return;
     const kind = this._kind;
     const request = (this._requestId || 0) + 1;
     this._requestId = request;
@@ -136,13 +151,18 @@ class RogbidHistoryCard extends HTMLElement {
           <nav></nav><div class="scroll"></div></ha-card>`;
       this._root.getElementById("refresh").addEventListener("click", () => this._load());
     }
-    this._root.querySelector("h2").textContent = this._config.title || "Rogbid Bridge";
+    const t = key => rogbidT(this._config,this._hass,key);
+    const heading = this._root.querySelector("h2");
+    heading.textContent = this._config.title || "Rogbid Bridge";
+    heading.hidden = this._config.show_title === false;
+    this._root.getElementById("refresh").title = t("refresh");
+    this._root.getElementById("refresh").setAttribute("aria-label",t("refresh"));
     const header = this._root.querySelector("header");
     const oldSelect = header.querySelector("select");
     if (oldSelect) oldSelect.remove();
     if (this._devices.length > 1) {
       const select = document.createElement("select");
-      select.setAttribute("aria-label", "Rogbid watch");
+      select.setAttribute("aria-label", t("watch"));
       for (const device of this._devices) {
         const option = document.createElement("option");
         option.value = device.device_id;
@@ -155,8 +175,8 @@ class RogbidHistoryCard extends HTMLElement {
     }
     const nav = this._root.querySelector("nav");
     nav.replaceChildren();
-    for (const key of orderKinds(this._config.button_order)) {
-      const label = KINDS.find(([id])=>id===key)[1];
+    for (const key of visibleKinds(this._config)) {
+      const label = KINDS.find(([id])=>id===key)[1].split(" ")[0] + " " + t(key);
       const button = document.createElement("button");
       button.textContent = label;
       button.setAttribute("aria-pressed", String(this._kind === key));
@@ -172,20 +192,21 @@ class RogbidHistoryCard extends HTMLElement {
     const area = this._root.querySelector(".scroll");
     area.replaceChildren();
     area.style.maxHeight = Math.max(120,Math.min(1200,Number(this._config.history_height)||420))+"px";
+    if (!this._kind) { const note = document.createElement("div"); note.className="hint"; note.textContent=t("sections"); area.append(note); return; }
     if (this._loading || this._error || !this._rows.length) {
       const note = document.createElement("div");
       note.className = "hint";
-      note.textContent = this._loading ? "Loading…" : this._error || (!this._deviceId ? "No Rogbid watches configured" : "No records yet");
+      note.textContent = this._loading ? t("loading") : this._error || (!this._deviceId ? t("noWatch") : t("empty"));
       area.append(note);
       return;
     }
     if (this._config.view_mode === "graph") { this._renderGraph(area); return; }
     const table = document.createElement("table");
-    const headings = this._kind === "heart" ? ["Date", "BPM"] :
-      this._kind === "oxygen" ? ["Date", "SpO₂"] :
-      this._kind === "steps" ? ["Date", "Steps", "kcal", "km"] :
-      ["Wake date", "Duration", "Deep", "Light", "REM", "Score"];
-    if (this._config.show_delete_buttons === true && this._hass?.user?.is_admin) headings.push("Delete");
+    const headings = this._kind === "heart" ? [t("date"), "BPM"] :
+      this._kind === "oxygen" ? [t("date"), "SpO₂"] :
+      this._kind === "steps" ? [t("date"), t("steps"), "kcal", "km"] :
+      [t("wakeDate"), t("duration"), t("deep"), t("light"), "REM", t("score")];
+    if (this._config.show_delete_buttons === true && this._hass?.user?.is_admin) headings.push(t("delete"));
     const tr = document.createElement("tr");
     for (const heading of headings) {
       const th = document.createElement("th");
@@ -202,7 +223,7 @@ class RogbidHistoryCard extends HTMLElement {
       const values = this._kind === "heart" ? [date, record.bpm] :
         this._kind === "oxygen" ? [date, record.spo2] :
         this._kind === "steps" ? [date, record.steps, record.kcal == null ? "" : Math.round(Number(record.kcal) / 1000), record.diatance == null ? "" : (Number(record.diatance) / 1000).toFixed(1)] :
-        [date, formatRogbidMinutes(record.duration_minutes), formatRogbidMinutes(record.deep_minutes), formatRogbidMinutes(record.light_minutes), formatRogbidMinutes(record.fast_minutes), record.score];
+        [date, formatRogbidMinutes(record.duration_minutes,rogbidLang(this._config,this._hass)), formatRogbidMinutes(record.deep_minutes,rogbidLang(this._config,this._hass)), formatRogbidMinutes(record.light_minutes,rogbidLang(this._config,this._hass)), formatRogbidMinutes(record.fast_minutes,rogbidLang(this._config,this._hass)), record.score];
       const row = document.createElement("tr");
       for (const value of values) {
         const td = document.createElement("td");
@@ -213,12 +234,12 @@ class RogbidHistoryCard extends HTMLElement {
         const cell = document.createElement("td");
         const button = document.createElement("button");
         button.textContent = "🗑";
-        button.title = "Delete this record from Home Assistant only";
-        button.setAttribute("aria-label", "Delete history record");
+        button.title = t("delete");
+        button.setAttribute("aria-label", t("delete"));
         button.addEventListener("click", async event => {
           event.stopPropagation();
           if (!record._record_id) return;
-          if (!confirm("Delete this record from Home Assistant? It will remain on the watch.")) return;
+          if (!confirm(t("confirmDelete"))) return;
           button.disabled = true;
           try {
             await this._hass.callWS({
@@ -229,7 +250,7 @@ class RogbidHistoryCard extends HTMLElement {
             await this._load();
           } catch (error) {
             button.disabled = false;
-            alert("Cannot delete record: " + String(error.message || error));
+            alert(t("deleteError") + ": " + String(error.message || error));
           }
         });
         cell.append(button);
@@ -262,7 +283,7 @@ class RogbidHistoryCard extends HTMLElement {
       y:Number(r[metric]), label:String(r.measured_at||r.date||r.sleep_date||i),
       valid:r[metric]!==null && r[metric]!==undefined && r[metric]!==""
     })).filter(p=>p.valid && Number.isFinite(p.y));
-    if (!points.length) { area.textContent="No numeric data"; return; }
+    if (!points.length) { area.textContent=rogbidT(this._config,this._hass,"noNumeric"); return; }
     if (points.some(p=>!Number.isFinite(p.x))) points.reverse().forEach((p,i)=>p.x=i);
     else points.sort((a,b)=>a.x-b.x);
     const x0=Math.min(...points.map(p=>p.x)), x1=Math.max(...points.map(p=>p.x));
@@ -303,7 +324,7 @@ class RogbidHistoryCard extends HTMLElement {
     if (!Array.isArray(stages) || stages.length < 2) {
       const hint = document.createElement("div");
       hint.className = "hint";
-      hint.textContent = "No stage timeline available";
+      hint.textContent = rogbidT(this._config,this._hass,"noStages");
       detail.append(hint);
       area.prepend(detail);
       return;
@@ -327,7 +348,7 @@ class RogbidHistoryCard extends HTMLElement {
     const start = timeline[0]?.time;
     const end = timeline[timeline.length - 1]?.time;
     if (timeline.length < 2 || end <= start) {
-      detail.append(document.createTextNode("No valid stage timeline"));
+      detail.append(document.createTextNode(rogbidT(this._config,this._hass,"invalidStages")));
       area.prepend(detail);
       return;
     }
@@ -340,7 +361,7 @@ class RogbidHistoryCard extends HTMLElement {
       segment.style.background = stage.type === 1 ? "#2d5fd2" :
         stage.type === 2 ? "#32beba" : "#888";
       segment.title = stage.label + " — " + next.label + ": " +
-        (stage.type === 1 ? "Deep" : stage.type === 2 ? "Light" : "Other/end");
+        (stage.type === 1 ? rogbidT(this._config,this._hass,"deep") : stage.type === 2 ? rogbidT(this._config,this._hass,"light") : rogbidT(this._config,this._hass,"other"));
       track.append(segment);
     }
     detail.append(track);
@@ -354,7 +375,7 @@ class RogbidHistoryCard extends HTMLElement {
     detail.append(labels);
     const legend = document.createElement("div");
     legend.className = "legend";
-    legend.textContent = "■ Deep (blue)   ■ Light (teal)   ■ Other / end (gray)";
+    legend.textContent = "■ " + rogbidT(this._config,this._hass,"deep") + " (blue)   ■ " + rogbidT(this._config,this._hass,"light") + " (teal)   ■ " + rogbidT(this._config,this._hass,"other") + " (gray)";
     detail.append(legend);
     const old = area.querySelector(".sleep-detail");
     if (old) old.remove();
@@ -377,7 +398,7 @@ class RogbidHistoryCardEditor extends HTMLElement {
   }
   _update(key, value) {
     const config = { ...this._config };
-    if (value) config[key] = value;
+    if (value !== null && value !== undefined) config[key] = value;
     else delete config[key];
     this._config = config;
     this.dispatchEvent(new CustomEvent("config-changed", {
@@ -386,15 +407,16 @@ class RogbidHistoryCardEditor extends HTMLElement {
   }
   _render() {
     this.replaceChildren();
+    const t = key => rogbidT(this._config,this._hass,key);
     const label = document.createElement("label");
-    label.textContent = "Rogbid watch";
+    label.textContent = t("watch");
     label.style.display = "block";
     this.append(label);
     const select = document.createElement("select");
     select.style.cssText = "display:block;margin:8px 0;padding:8px;width:95%";
     const auto = document.createElement("option");
     auto.value = "";
-    auto.textContent = "Automatic (first configured watch)";
+    auto.textContent = t("autoWatch");
     select.append(auto);
     const devices = this._devices || [];
     for (const device of devices) {
@@ -413,7 +435,7 @@ class RogbidHistoryCardEditor extends HTMLElement {
     select.addEventListener("change", () => this._update("device_id", select.value));
     this.append(select);
     const input = document.createElement("input");
-    input.placeholder = "Card title";
+    input.placeholder = t("cardTitle");
     input.value = this._config.title || "";
     input.style.cssText = "display:block;margin:8px 0;padding:8px;width:90%";
     input.addEventListener("change", () => this._update("title", input.value));
@@ -421,10 +443,35 @@ class RogbidHistoryCardEditor extends HTMLElement {
     const add=(labelText,el)=>{const label=document.createElement("label");label.textContent=labelText;
       label.style.cssText="display:block;margin-top:12px";el.style.cssText="display:block;margin:6px 0;padding:8px;width:95%";
       this.append(label,el);};
-    const heading=document.createElement("div");heading.textContent="Button order";heading.style.marginTop="12px";this.append(heading);
+    const language=document.createElement("select");
+    for (const [code,name] of [["auto",t("haLanguage")],["ru","Русский"],["en","English"],["fr","Français"],["de","Deutsch"],["lb","Lëtzebuergesch"],["it","Italiano"],["pt","Português"],["es","Español"]]) {
+      const option=document.createElement("option");option.value=code;option.textContent=name;language.append(option);
+    }
+    language.value=this._config.language||"auto";
+    language.addEventListener("change",()=>this._update("language",language.value==="auto"?null:language.value));
+    add(t("language"),language);
+    const titleToggle=document.createElement("input");titleToggle.type="checkbox";
+    titleToggle.checked=this._config.show_title!==false;
+    titleToggle.addEventListener("change",()=>this._update("show_title",titleToggle.checked));
+    const titleLabel=document.createElement("label");titleLabel.style.cssText="display:flex;gap:8px;align-items:center;margin-top:12px";
+    titleLabel.append(titleToggle,document.createTextNode(t("showTitle")));this.append(titleLabel);
+    const sections=document.createElement("div");sections.textContent=t("sections");sections.style.marginTop="12px";this.append(sections);
+    for(const [key] of KINDS) {
+      const toggle=document.createElement("input");toggle.type="checkbox";
+      toggle.checked=!this._config.hidden_sections?.includes(key);
+      toggle.addEventListener("change",()=>{
+        const hidden=new Set(this._config.hidden_sections||[]);
+        if(toggle.checked) hidden.delete(key);else hidden.add(key);
+        this._update("hidden_sections",[...hidden]);
+      });
+      const row=document.createElement("label");row.style.cssText="display:flex;gap:8px;align-items:center;margin:5px 0";
+      row.append(toggle,document.createTextNode(KINDS.find(([id])=>id===key)[1].split(" ")[0]+" "+t(key)));
+      this.append(row);
+    }
+    const heading=document.createElement("div");heading.textContent=t("order");heading.style.marginTop="12px";this.append(heading);
     const order=orderKinds(this._config.button_order);
     order.forEach((key,i)=>{const row=document.createElement("div");row.style.cssText="display:flex;gap:8px;align-items:center;margin:5px 0";
-      const label=document.createElement("span");label.textContent=KINDS.find(([id])=>id===key)[1];label.style.flex="1";row.append(label);
+      const label=document.createElement("span");label.textContent=KINDS.find(([id])=>id===key)[1].split(" ")[0]+" "+t(key);label.style.flex="1";row.append(label);
       for(const [symbol,delta] of [["↑",-1],["↓",1]]){const button=document.createElement("button");button.textContent=symbol;
         button.disabled=i+delta<0||i+delta>=order.length;
         button.addEventListener("click",()=>{const next=[...order];[next[i],next[i+delta]]=[next[i+delta],next[i]];this._update("button_order",next);});
@@ -432,11 +479,11 @@ class RogbidHistoryCardEditor extends HTMLElement {
     const limit=document.createElement("input");limit.type="number";limit.min="1";limit.max="500";
     limit.value=String(this._config.history_limit||200);
     limit.addEventListener("change",()=>this._update("history_limit",Math.max(1,Math.min(500,Number(limit.value)||200))));
-    add("History records (1–500)",limit);
+    add(t("limit"),limit);
     const height=document.createElement("input");height.type="number";height.min="120";height.max="1200";
     height.value=String(this._config.history_height||420);
     height.addEventListener("change",()=>this._update("history_height",Math.max(120,Math.min(1200,Number(height.value)||420))));
-    add("History height (px)",height);
+    add(t("height"),height);
     const deletion = document.createElement("input");
     deletion.type = "checkbox";
     deletion.checked = this._config.show_delete_buttons === true;
@@ -444,13 +491,13 @@ class RogbidHistoryCardEditor extends HTMLElement {
     deletion.addEventListener("change", () => this._update("show_delete_buttons", deletion.checked));
     const deletionLabel = document.createElement("label");
     deletionLabel.style.cssText = "display:flex;align-items:center;margin-top:12px";
-    deletionLabel.append(deletion, document.createTextNode("Show delete buttons / Показывать удаление записей"));
+    deletionLabel.append(deletion, document.createTextNode(t("showDelete")));
     this.append(deletionLabel);
     const mode=document.createElement("select");
-    for(const [value,label] of [["table","Table"],["graph","Graph"]]){const option=document.createElement("option");
+    for(const [value,label] of [["table",t("table")],["graph",t("graph")]]){const option=document.createElement("option");
       option.value=value;option.textContent=label;mode.append(option);}
     mode.value=this._config.view_mode||"table";
-    mode.addEventListener("change",()=>this._update("view_mode",mode.value));add("History display",mode);
+    mode.addEventListener("change",()=>this._update("view_mode",mode.value));add(t("display"),mode);
   }
 }
 customElements.define("rogbid-history-card", RogbidHistoryCard);
