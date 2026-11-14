@@ -32,7 +32,6 @@ class GattDiagnostics:
         self.last_attempt = time.monotonic()
         self.task = self.hass.async_create_task(
             self._probe(service_info.address),
-            eager_start=False,
         )
 
     async def _probe(self, address):
