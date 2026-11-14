@@ -813,7 +813,7 @@ class MainActivity : Activity() {
   })
   val showFullId = Button(this).apply { text = "Show full ID / Полный ID" }
   val fullId = TextView(this).apply {
-   text = watchId.chunked(12).joinToString("\\n")
+   text = watchId.chunked(12).joinToString("\n")
    textSize = 14f
    typeface = Typeface.MONOSPACE
    setTextColor(currentSkin().foreground)
