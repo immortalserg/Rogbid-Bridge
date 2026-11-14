@@ -18,6 +18,16 @@ SENSORS = (
     SensorEntityDescription(key="sleep_deep", name="Deep sleep", native_unit_of_measurement="min", state_class=SensorStateClass.MEASUREMENT),
     SensorEntityDescription(key="sleep_light", name="Light sleep", native_unit_of_measurement="min", state_class=SensorStateClass.MEASUREMENT),
     SensorEntityDescription(key="sleep_fast", name="REM sleep", native_unit_of_measurement="min", state_class=SensorStateClass.MEASUREMENT),
+    *(SensorEntityDescription(
+        key=f"{metric}_{period}d",
+        name=f"{label} last {period} days",
+        native_unit_of_measurement=unit,
+        state_class=SensorStateClass.MEASUREMENT,
+    ) for metric, label, unit in (
+        ("steps", "Steps", "steps"),
+        ("kcal", "Calories", "kcal"),
+        ("km", "Distance", "km"),
+    ) for period in (7, 30, 365)),
 )
 
 async def async_setup_entry(hass, entry, async_add_entities):
