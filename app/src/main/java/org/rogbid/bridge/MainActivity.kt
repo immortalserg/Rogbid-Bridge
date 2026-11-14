@@ -45,6 +45,8 @@ class MainActivity : Activity() {
 
  private var latestSteps: TextView? = null
  private var latestSleep: TextView? = null
+ private var latestStepsExtra: TextView? = null
+ private var latestSleepExtra: TextView? = null
  private var measurementGeneration = 0
  private var pendingSensorType = 0
  private val measurementDb by lazy {
@@ -110,6 +112,7 @@ class MainActivity : Activity() {
   pulseValue?.setTextColor(currentSkin().foreground)
   oxygenValue?.setTextColor(currentSkin().foreground)
  }
+ private fun formatSleepMinutes(m: Int): String = "%02d:%02d".format(java.util.Locale.US, m.coerceAtLeast(0) / 60, m.coerceAtLeast(0) % 60)
  private fun refreshLatest() {
   Thread {
    var heart = Settings.System.getInt(contentResolver, "heart_rate", -1).takeIf { it in 35..220 }?.let { "$it bpm" } ?: "—"
@@ -133,16 +136,35 @@ class MainActivity : Activity() {
      }
     }
    } catch (_: Exception) {}
+   var stepsExtra = "—"
+   try {
+    contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+     arrayOf("date", "kcal", "diatance"), null, null, "date DESC")?.use { c ->
+     if (c.moveToFirst()) {
+      fun number(name: String): Double? {
+       val i = c.getColumnIndex(name)
+       return if (i >= 0 && !c.isNull(i))
+        c.getString(i)?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+       else null
+      }
+      val kcal = number("kcal")?.let { kotlin.math.round(it / 1000.0).toLong().toString() } ?: "—"
+      val km = number("diatance")?.let { String.format(java.util.Locale.getDefault(), "%.1f", it / 1000.0) } ?: "—"
+      stepsExtra = "$kcal kcal · $km km"
+     }
+    }
+   } catch (_: Exception) {}
    val steps = try {
     val n = Settings.System.getInt(contentResolver, "today_steps", -1)
     if (n >= 0) "$n" else "—"
    } catch (_: Exception) { "—" }
+   var sleepExtra = "—"
    var sleep = "—"
    try {
     // Archived sleep takes precedence over the resettable vendor provider.
     val repo = SleepRepository(this)
     val saved = try { repo.latest() } finally { repo.close() }
     if (saved != null) {
+     sleepExtra = "${formatSleepMinutes(saved.optInt("deep_minutes"))} · ${formatSleepMinutes(saved.optInt("light_minutes"))}"
      val mins = saved.optInt("duration_minutes")
      if (mins > 0) sleep = "${mins / 60}${L10n.text("hours")} ${mins % 60}${L10n.text("minutes")}"
     } else {
@@ -160,6 +182,8 @@ class MainActivity : Activity() {
     if (activeMeasurementType != 31) oxygenValue?.text = oxygen
     latestSteps?.text = steps
     latestSleep?.text = sleep
+    latestStepsExtra?.text = stepsExtra
+    latestSleepExtra?.text = sleepExtra
    }
   }.start()
  }
@@ -342,7 +366,7 @@ class MainActivity : Activity() {
   measurementRow.addView(heartButton, LinearLayout.LayoutParams(0, side, 1f).apply { rightMargin = (4 * density).toInt() })
   measurementRow.addView(oxygenButton, LinearLayout.LayoutParams(0, side, 1f).apply { leftMargin = (4 * density).toInt() })
   layout.addView(measurementRow)
-  fun tile(icon: String, label: String): Pair<LinearLayout, Pair<TextView, TextView>> {
+  fun tile(icon: String, label: String, extra: Boolean = false): Pair<LinearLayout, Pair<TextView, TextView>> {
    val cell = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     gravity = Gravity.CENTER
@@ -376,18 +400,26 @@ class MainActivity : Activity() {
    }
    cell.addView(caption)
    cell.addView(value)
+   if (extra) {
+    val detail = TextView(this).apply {
+     text = "—"; textSize = 12f; gravity = Gravity.CENTER
+     setTextColor(skin.foreground); setSingleLine(true)
+    }
+    cell.addView(detail)
+    if (icon == "♟") latestStepsExtra = detail else latestSleepExtra = detail
+   }
    return Pair(cell, Pair(caption, value))
   }
   val summaryRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val summaryRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   val heartCell = tile("♥", L10n.text("pulse"))
   val oxygenCell = tile("O₂", L10n.text("oxygen"))
-  val stepsCell = tile("♟", L10n.text("steps"))
-  val sleepCell = tile("☾", L10n.text("sleep"))
+  val stepsCell = tile("♟", L10n.text("steps"), true)
+  val sleepCell = tile("☾", L10n.text("sleep"), true)
   for ((row, pair) in listOf(
    Pair(summaryRow1, heartCell), Pair(summaryRow1, oxygenCell),
    Pair(summaryRow2, stepsCell), Pair(summaryRow2, sleepCell)
-  )) row.addView(pair.first, LinearLayout.LayoutParams(0, (88 * density).toInt(), 1f).apply {
+  )) row.addView(pair.first, LinearLayout.LayoutParams(0, ((if (row === summaryRow2) 112 else 88) * density).toInt(), 1f).apply {
    setMargins((3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt(), (3 * density).toInt())
   })
   layout.addView(summaryRow1)
@@ -406,194 +438,10 @@ class MainActivity : Activity() {
   measureOxygenButton = oxygenButton
   heartButton.setOnClickListener { beginMeasurement(21) }
   oxygenButton.setOnClickListener { beginMeasurement(31) }
-  val button = Button(this).apply { text = L10n.text("send_data") }
-  val history = Button(this).apply { text = L10n.text("send_history") }
-  val settings = Button(this).apply { text = L10n.text("settings") }
-  val status = TextView(this)
-  val lower = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val lower2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  for (control in arrayOf(button, history, settings)) styleButton(control, skin)
-  val buttonGap = (8 * density).toInt()
-  lower.addView(button, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { rightMargin = buttonGap / 2 })
-  lower.addView(history, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply { leftMargin = buttonGap / 2 })
-  lower2.addView(settings, LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f))
-  lower2.setPadding(0, buttonGap, 0, 0)
-  layout.addView(lower)
-  layout.addView(lower2)
+  layout.addView(settingsButton(L10n.text("settings")) { showSettings() })
   show(layout)
   refreshLatest()
-  settings.setOnClickListener { showSettings() }
-  history.setOnClickListener {
-   val hostname = prefs.getString("host", "")?.trim().orEmpty()
-   val number = prefs.getString("port", "1883")?.toIntOrNull()
-   val id = WatchIdentity.id(this)?.trim().orEmpty()
-   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
-    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage(L10n.text("configure_mqtt"))
-    return@setOnClickListener
-   }
-   history.isEnabled = false
-   button.isEnabled = false
-   
-   Thread {
-    try {
-     val records = linkedMapOf<String, JSONObject>()
-     val uri = Uri.parse("content://com.watchHealth.Walk/query")
-     val cursor = contentResolver.query(uri,
-      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date ASC")
-      ?: throw IllegalStateException(L10n.text("history_provider_empty"))
-     cursor.use {
-      val dateIndex = it.getColumnIndex("date")
-      if (dateIndex < 0) throw IllegalStateException(L10n.text("missing_date"))
-      while (it.moveToNext()) {
-       if (it.isNull(dateIndex)) continue
-       val date = it.getString(dateIndex)?.trim().orEmpty()
-       // Date is also used as a topic segment: reject unexpected provider values.
-       if (!date.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) continue
-       val data = JSONObject().put("date", date)
-       for (name in arrayOf("steps", "diatance", "kcal", "targetsteps")) {
-        val index = it.getColumnIndex(name)
-        if (index >= 0 && !it.isNull(index)) data.put(name, it.getLong(index))
-       }
-       records[date] = data
-      }
-     }
-     if (records.isEmpty()) throw IllegalStateException(L10n.text("no_dated_history"))
-     val login = prefs.getString("user", "").orEmpty()
-     val password = prefs.getString("password", "").orEmpty()
-     val scheme = if (number == 8883) "ssl" else "tcp"
-     val client = MqttClient(scheme + "://" + hostname + ":" + number,
-      "rogbid-history-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
-     var published = 0
-     try {
-      val options = MqttConnectOptions().apply {
-       isCleanSession = true
-       connectionTimeout = 10
-       if (login.isNotBlank()) userName = login
-       if (password.isNotEmpty()) this.password = password.toCharArray()
-      }
-      client.connect(options)
-      for ((date, data) in records) {
-       client.publish("rogbid/" + id + "/history/" + date,
-        MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
-         qos = 1
-         isRetained = true
-        })
-       published++
-      }
-      runOnUiThread { notifyMessage(L10n.text("history_published").replace("%s", published.toString())) }
-     } finally {
-      if (client.isConnected) client.disconnect()
-      client.close()
-     }
-    } catch (e: Exception) {
-     runOnUiThread { notifyMessage(L10n.text("history_error") + e.message) }
-    } finally {
-     runOnUiThread {
-      history.isEnabled = true
-      button.isEnabled = true
-     }
-    }
-   }.start()
-  }
-  button.setOnClickListener {
-   val hostname = prefs.getString("host", "")?.trim().orEmpty()
-   val number = prefs.getString("port", "1883")?.toIntOrNull()
-   val id = WatchIdentity.id(this)?.trim().orEmpty()
-   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
-    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
-    notifyMessage(L10n.text("configure_mqtt"))
-    return@setOnClickListener
-   }
-   val login = prefs.getString("user", "").orEmpty()
-   val password = prefs.getString("password", "").orEmpty()
-   button.isEnabled = false
-   
-   Thread {
-    try {
-     val data = JSONObject()
-     data.put("last_update", java.time.Instant.now().toString())
-     data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
-     // Vendor firmware exposes the most recent measurements in Settings.System.
-     val heartRate = Settings.System.getInt(contentResolver, "heart_rate", -1)
-     if (heartRate in 1..250) data.put("heart_rate", heartRate)
-     val oxygen = Settings.System.getInt(contentResolver, "OXYGEN", -1)
-     if (oxygen in 1..100) data.put("spo2", oxygen)
-     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
-      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date DESC")?.use { cursor ->
-      if (cursor.moveToFirst()) {
-       for (name in arrayOf("date", "steps", "diatance", "kcal", "targetsteps")) {
-        val i = cursor.getColumnIndex(name)
-        if (i >= 0 && !cursor.isNull(i)) {
-         if (name == "date") data.put(name, cursor.getString(i))
-         else data.put(name, cursor.getLong(i))
-        }
-       }
-      }
-     }
-     // Read the latest sleep record from the vendor ContentProvider.
-     // Keep raw timestamps and phase details until their formats are confirmed.
-     var sleepError: String? = null
-     try {
-      contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
-       null, null, null, "_id DESC")?.use { cursor ->
-       if (cursor.moveToFirst()) {
-        fun raw(name: String): String? {
-         val index = cursor.getColumnIndex(name)
-         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else null
-        }
-        fun minutes(prefix: String): Int? {
-         val hh = raw(prefix + "HH")?.toIntOrNull()
-         val mm = raw(prefix + "MM")?.toIntOrNull()
-         return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
-        }
-        val sleep = JSONObject()
-        for (name in arrayOf("_id", "sleeptime", "wakeuptime", "dataList", "code",
-         "sumHH", "sumMM", "fastHH", "fastMM", "lightHH", "lightMM", "deepHH", "deepMM")) {
-         raw(name)?.let { sleep.put(name, it) }
-        }
-        data.put("sleep_raw", sleep)
-        minutes("sum")?.let { data.put("sleep_duration", it) }
-        minutes("deep")?.let { data.put("sleep_deep", it) }
-        minutes("light")?.let { data.put("sleep_light", it) }
-        minutes("fast")?.let { data.put("sleep_fast", it) }
-        raw("sleeptime")?.let { data.put("sleep_start", it) }
-        raw("wakeuptime")?.let { data.put("sleep_end", it) }
-       }
-      } ?: run { sleepError = "Sleep provider returned null" }
-     } catch (e: Exception) {
-      sleepError = e.javaClass.simpleName + ": " + e.message
-     }
-     sleepError?.let { data.put("sleep_error", it) }
-     val scheme = if (number == 8883) "ssl" else "tcp"
-     val client = MqttClient(scheme + "://" + hostname + ":" + number,
-      "rogbid-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
-     try {
-      val options = MqttConnectOptions().apply {
-       isCleanSession = true
-       connectionTimeout = 10
-       if (login.isNotBlank()) userName = login
-       if (password.isNotEmpty()) this.password = password.toCharArray()
-      }
-      client.connect(options)
-      val topic = "rogbid/" + id + "/state"
-      // Native HA integration creates entities; avoid MQTT Discovery duplicates.
-      client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
-       qos = 1
-       isRetained = true
-      })
-      runOnUiThread { status.text = L10n.text("published") + topic + "\n" + data.toString() }
-     } finally {
-      if (client.isConnected) client.disconnect()
-      client.close()
-     }
-    } catch (e: Exception) {
-     runOnUiThread { notifyMessage(L10n.text("mqtt_error") + e.message) }
-    } finally {
-     runOnUiThread { button.isEnabled = true }
-    }
-   }.start()
-  }
+
  }
  private fun sleepScreens() = SleepScreens(
   this, currentSkin().background, currentSkin().foreground,
@@ -857,6 +705,183 @@ class MainActivity : Activity() {
   val port = settingsField(layout, L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
   val user = settingsField(layout, L10n.text("username"), prefs.getString("user", "").orEmpty())
   val pass = settingsField(layout, L10n.text("password"), prefs.getString("password", "").orEmpty())
+  val button = settingsButton(L10n.text("send_data")) {}
+  val history = settingsButton(L10n.text("send_history")) {}
+  val status = TextView(this).apply { setTextColor(currentSkin().foreground) }
+  layout.addView(button)
+  layout.addView(history)
+  layout.addView(status)
+  history.setOnClickListener {
+   val hostname = prefs.getString("host", "")?.trim().orEmpty()
+   val number = prefs.getString("port", "1883")?.toIntOrNull()
+   val id = WatchIdentity.id(this)?.trim().orEmpty()
+   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
+    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    notifyMessage(L10n.text("configure_mqtt"))
+    return@setOnClickListener
+   }
+   history.isEnabled = false
+   button.isEnabled = false
+   
+   Thread {
+    try {
+     val records = linkedMapOf<String, JSONObject>()
+     val uri = Uri.parse("content://com.watchHealth.Walk/query")
+     val cursor = contentResolver.query(uri,
+      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date ASC")
+      ?: throw IllegalStateException(L10n.text("history_provider_empty"))
+     cursor.use {
+      val dateIndex = it.getColumnIndex("date")
+      if (dateIndex < 0) throw IllegalStateException(L10n.text("missing_date"))
+      while (it.moveToNext()) {
+       if (it.isNull(dateIndex)) continue
+       val date = it.getString(dateIndex)?.trim().orEmpty()
+       // Date is also used as a topic segment: reject unexpected provider values.
+       if (!date.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) continue
+       val data = JSONObject().put("date", date)
+       for (name in arrayOf("steps", "diatance", "kcal", "targetsteps")) {
+        val index = it.getColumnIndex(name)
+        if (index >= 0 && !it.isNull(index)) data.put(name, it.getLong(index))
+       }
+       records[date] = data
+      }
+     }
+     if (records.isEmpty()) throw IllegalStateException(L10n.text("no_dated_history"))
+     val login = prefs.getString("user", "").orEmpty()
+     val password = prefs.getString("password", "").orEmpty()
+     val scheme = if (number == 8883) "ssl" else "tcp"
+     val client = MqttClient(scheme + "://" + hostname + ":" + number,
+      "rogbid-history-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
+     var published = 0
+     try {
+      val options = MqttConnectOptions().apply {
+       isCleanSession = true
+       connectionTimeout = 10
+       if (login.isNotBlank()) userName = login
+       if (password.isNotEmpty()) this.password = password.toCharArray()
+      }
+      client.connect(options)
+      for ((date, data) in records) {
+       client.publish("rogbid/" + id + "/history/" + date,
+        MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
+         qos = 1
+         isRetained = true
+        })
+       published++
+      }
+      runOnUiThread { notifyMessage(L10n.text("history_published").replace("%s", published.toString())) }
+     } finally {
+      if (client.isConnected) client.disconnect()
+      client.close()
+     }
+    } catch (e: Exception) {
+     runOnUiThread { notifyMessage(L10n.text("history_error") + e.message) }
+    } finally {
+     runOnUiThread {
+      history.isEnabled = true
+      button.isEnabled = true
+     }
+    }
+   }.start()
+  }
+  button.setOnClickListener {
+   val hostname = prefs.getString("host", "")?.trim().orEmpty()
+   val number = prefs.getString("port", "1883")?.toIntOrNull()
+   val id = WatchIdentity.id(this)?.trim().orEmpty()
+   if (hostname.isEmpty() || number == null || number !in 1..65535 ||
+    !id.matches(Regex("[A-Za-z0-9_-]+"))) {
+    notifyMessage(L10n.text("configure_mqtt"))
+    return@setOnClickListener
+   }
+   val login = prefs.getString("user", "").orEmpty()
+   val password = prefs.getString("password", "").orEmpty()
+   button.isEnabled = false
+   
+   Thread {
+    try {
+     val data = JSONObject()
+     data.put("last_update", java.time.Instant.now().toString())
+     data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
+     // Vendor firmware exposes the most recent measurements in Settings.System.
+     val heartRate = Settings.System.getInt(contentResolver, "heart_rate", -1)
+     if (heartRate in 1..250) data.put("heart_rate", heartRate)
+     val oxygen = Settings.System.getInt(contentResolver, "OXYGEN", -1)
+     if (oxygen in 1..100) data.put("spo2", oxygen)
+     contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+      arrayOf("date", "steps", "diatance", "kcal", "targetsteps"), null, null, "date DESC")?.use { cursor ->
+      if (cursor.moveToFirst()) {
+       for (name in arrayOf("date", "steps", "diatance", "kcal", "targetsteps")) {
+        val i = cursor.getColumnIndex(name)
+        if (i >= 0 && !cursor.isNull(i)) {
+         if (name == "date") data.put(name, cursor.getString(i))
+         else data.put(name, cursor.getLong(i))
+        }
+       }
+      }
+     }
+     // Read the latest sleep record from the vendor ContentProvider.
+     // Keep raw timestamps and phase details until their formats are confirmed.
+     var sleepError: String? = null
+     try {
+      contentResolver.query(Uri.parse("content://com.wiite.provider/sleep"),
+       null, null, null, "_id DESC")?.use { cursor ->
+       if (cursor.moveToFirst()) {
+        fun raw(name: String): String? {
+         val index = cursor.getColumnIndex(name)
+         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else null
+        }
+        fun minutes(prefix: String): Int? {
+         val hh = raw(prefix + "HH")?.toIntOrNull()
+         val mm = raw(prefix + "MM")?.toIntOrNull()
+         return if (hh != null && mm != null && hh >= 0 && mm in 0..59) hh * 60 + mm else null
+        }
+        val sleep = JSONObject()
+        for (name in arrayOf("_id", "sleeptime", "wakeuptime", "dataList", "code",
+         "sumHH", "sumMM", "fastHH", "fastMM", "lightHH", "lightMM", "deepHH", "deepMM")) {
+         raw(name)?.let { sleep.put(name, it) }
+        }
+        data.put("sleep_raw", sleep)
+        minutes("sum")?.let { data.put("sleep_duration", it) }
+        minutes("deep")?.let { data.put("sleep_deep", it) }
+        minutes("light")?.let { data.put("sleep_light", it) }
+        minutes("fast")?.let { data.put("sleep_fast", it) }
+        raw("sleeptime")?.let { data.put("sleep_start", it) }
+        raw("wakeuptime")?.let { data.put("sleep_end", it) }
+       }
+      } ?: run { sleepError = "Sleep provider returned null" }
+     } catch (e: Exception) {
+      sleepError = e.javaClass.simpleName + ": " + e.message
+     }
+     sleepError?.let { data.put("sleep_error", it) }
+     val scheme = if (number == 8883) "ssl" else "tcp"
+     val client = MqttClient(scheme + "://" + hostname + ":" + number,
+      "rogbid-" + id + "-" + System.currentTimeMillis(), MemoryPersistence())
+     try {
+      val options = MqttConnectOptions().apply {
+       isCleanSession = true
+       connectionTimeout = 10
+       if (login.isNotBlank()) userName = login
+       if (password.isNotEmpty()) this.password = password.toCharArray()
+      }
+      client.connect(options)
+      val topic = "rogbid/" + id + "/state"
+      // Native HA integration creates entities; avoid MQTT Discovery duplicates.
+      client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
+       qos = 1
+       isRetained = true
+      })
+      runOnUiThread { status.text = L10n.text("published") + topic + "\n" + data.toString() }
+     } finally {
+      if (client.isConnected) client.disconnect()
+      client.close()
+     }
+    } catch (e: Exception) {
+     runOnUiThread { notifyMessage(L10n.text("mqtt_error") + e.message) }
+    } finally {
+     runOnUiThread { button.isEnabled = true }
+    }
+   }.start()
+  }
   val autoSync = CheckBox(this).apply {
    text = L10n.text("auto_sync")
    isChecked = prefs.getBoolean("auto", false)
