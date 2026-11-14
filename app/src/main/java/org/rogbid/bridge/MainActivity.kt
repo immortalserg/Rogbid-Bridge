@@ -387,10 +387,10 @@ class MainActivity : Activity() {
     isFocusable = true
    }
    val caption = TextView(this).apply {
-    text = "$icon  $label"; textSize = 15f; gravity = Gravity.CENTER
+    text = "$icon  $label"; textSize = 18f; gravity = Gravity.CENTER
     setTextColor(skin.accent)
     setMaxLines(2)
-    setAutoSizeTextTypeUniformWithConfiguration(10, 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+    setAutoSizeTextTypeUniformWithConfiguration(14, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
    }
    val value = TextView(this).apply {
     text = "—"; textSize = 25f; gravity = Gravity.CENTER
@@ -402,8 +402,9 @@ class MainActivity : Activity() {
    cell.addView(value)
    if (extra) {
     val detail = TextView(this).apply {
-     text = "—"; textSize = 12f; gravity = Gravity.CENTER
+     text = "—"; textSize = 15f; gravity = Gravity.CENTER
      setTextColor(skin.foreground); setSingleLine(true)
+     setAutoSizeTextTypeUniformWithConfiguration(12, 15, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
     }
     cell.addView(detail)
     if (icon == "♟") latestStepsExtra = detail else latestSleepExtra = detail
