@@ -166,7 +166,7 @@ class MainActivity : Activity() {
  private fun publishMeasurement(type: Int, heart: Int, oxygen: Int, time: String) {
   val host = prefs.getString("host", "")?.trim().orEmpty()
   val port = prefs.getString("port", "1883")?.toIntOrNull()
-  val id = prefs.getString("device", "king")?.trim().orEmpty()
+  val id = WatchIdentity.id(this)?.trim().orEmpty()
   if (host.isEmpty() || port == null || port !in 1..65535 ||
    !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException(L10n.text("configure_mqtt"))
   val topic = "rogbid/$id/measurements/" + (if (type == 21) "heart_rate" else "spo2")
@@ -446,7 +446,7 @@ class MainActivity : Activity() {
   history.setOnClickListener {
    val hostname = prefs.getString("host", "")?.trim().orEmpty()
    val number = prefs.getString("port", "1883")?.toIntOrNull()
-   val id = prefs.getString("device", "king")?.trim().orEmpty()
+   val id = WatchIdentity.id(this)?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
     notifyMessage(L10n.text("configure_mqtt"))
@@ -519,7 +519,7 @@ class MainActivity : Activity() {
   button.setOnClickListener {
    val hostname = prefs.getString("host", "")?.trim().orEmpty()
    val number = prefs.getString("port", "1883")?.toIntOrNull()
-   val id = prefs.getString("device", "king")?.trim().orEmpty()
+   val id = WatchIdentity.id(this)?.trim().orEmpty()
    if (hostname.isEmpty() || number == null || number !in 1..65535 ||
     !id.matches(Regex("[A-Za-z0-9_-]+"))) {
     notifyMessage(L10n.text("configure_mqtt"))
@@ -850,7 +850,7 @@ class MainActivity : Activity() {
   val port = field(L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
   val user = field(L10n.text("username"), prefs.getString("user", "").orEmpty())
   val pass = field(L10n.text("password"), prefs.getString("password", "").orEmpty())
-  val device = field(L10n.text("device_id"), prefs.getString("device", "king").orEmpty())
+  val device = field(L10n.text("device_id"), WatchIdentity.id(this)).apply { isEnabled = false }
   val skinNames = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky").map { L10n.text(it) }.toTypedArray()
   val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   layout.addView(TextView(this).apply {
@@ -926,7 +926,7 @@ class MainActivity : Activity() {
    } else {
     prefs.edit().putString("host", host.text.toString().trim())
      .putString("port", p.toString()).putString("user", user.text.toString())
-     .putString("password", pass.text.toString()).putString("device", d)
+     .putString("password", pass.text.toString())
       .putString("skin", skinKeys[skinChoice.selectedItemPosition])
       .putString("language", languageKeys[languageChoice.selectedItemPosition])
       .putInt("interval_minutes", intervalMinutes)
