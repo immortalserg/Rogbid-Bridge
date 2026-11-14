@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import date, timedelta
 
 from bleak import BleakClient
 from homeassistant.components import bluetooth
@@ -98,7 +99,11 @@ class GattDiagnostics:
                             "Watch Bridge GATT: device_info verified id=%s protocol=%s",
                             reported_id, reply.get("protocol"),
                         )
-                        await self._read_heart_history(client)
+                        for kind in ("heart", "oxygen", "steps", "sleep"):
+                            try:
+                                await self._read_history(client, kind)
+                            except Exception as exc:
+                                _LOGGER.warning("Watch Bridge GATT: %s sync failed: %s", kind, exc)
                     else:
                         _LOGGER.warning(
                             "Watch Bridge GATT: device_id mismatch expected=%s reported=%s",
@@ -120,55 +125,102 @@ class GattDiagnostics:
                     _LOGGER.warning("Watch Bridge GATT: disconnect failed: %s", exc)
 
 
-    async def _read_heart_history(self, client):
-        """Resume history in ten-record batches, bounded per connection."""
-        after_id = await self.hass.async_add_executor_job(
-            self.journal.get_sync_cursor, self.expected_device_id, "heart"
-        )
+    async def _read_history(self, client, kind):
+        """Synchronize one journal, preserving per-kind cursor on disconnect."""
+        if kind == "steps":
+            last_date = await self.hass.async_add_executor_job(
+                self.journal.get_steps_cursor, self.expected_device_id
+            )
+            # Revisit the latest day because step totals can change.
+            after_date = ((date.fromisoformat(last_date) - timedelta(days=1)).isoformat()
+                          if last_date else "")
+        else:
+            after_id = await self.hass.async_add_executor_job(
+                self.journal.get_sync_cursor, self.expected_device_id, kind
+            )
         count = 0
-        batch_size = 10
-        max_records = 100
-        deadline = time.monotonic() + 45
         completed = False
-        while count < max_records and time.monotonic() < deadline:
-            request = json.dumps({"type": "heart_history", "after_id": after_id})
+        deadline = time.monotonic() + 35
+        while count < 100 and time.monotonic() < deadline:
+            request = {"type": f"{kind}_history"}
+            if kind == "steps":
+                request["after_date"] = after_date
+            else:
+                request["after_id"] = after_id
             await asyncio.wait_for(
-                client.write_gatt_char(REQUEST_UUID, request.encode(), response=True),
+                client.write_gatt_char(REQUEST_UUID, json.dumps(request).encode(), response=True),
                 timeout=10,
             )
             raw = await asyncio.wait_for(client.read_gatt_char(STREAM_UUID), timeout=10)
             reply = json.loads(bytes(raw).decode())
-            if not isinstance(reply, dict) or reply.get("type") != "heart_history":
-                raise ValueError("Unexpected heart_history response")
+            if not isinstance(reply, dict) or reply.get("type") != request["type"]:
+                raise ValueError(f"Unexpected {kind} history response")
             if reply.get("done") is True:
                 completed = True
                 break
             record = reply.get("record")
             if not isinstance(record, dict):
-                raise ValueError("Missing heart history record")
-            record_id = record.get("id")
+                raise ValueError(f"Missing {kind} record")
             measured_at = record.get("measured_at")
-            heart_rate = record.get("heart_rate")
-            if (type(record_id) is not int or record_id <= after_id
-                    or not isinstance(measured_at, str)
-                    or type(heart_rate) is not int or not 35 <= heart_rate <= 220):
-                raise ValueError("Invalid heart history record")
-            payload = {"kind": "heart", "id": f"heart:{record_id}",
-                       "measured_at": measured_at, "bpm": heart_rate}
+            if not isinstance(measured_at, str) or not measured_at or len(measured_at) > 64:
+                raise ValueError(f"Invalid {kind} timestamp")
+            if kind == "steps":
+                record_date = record.get("date")
+                if (not isinstance(record_date, str) or len(record_date) != 10
+                        or record_date <= after_date):
+                    raise ValueError("Invalid steps date")
+                date.fromisoformat(record_date)
+                payload = {"kind": kind, "id": f"steps:{record_date}",
+                           "measured_at": measured_at, "date": record_date}
+                for field in ("steps", "kcal", "diatance"):
+                    if field in record:
+                        value = record[field]
+                        if type(value) not in (int, float) or not 0 <= value <= 1e9:
+                            raise ValueError(f"Invalid steps {field}")
+                        payload[field] = value
+                cursor_value = record_date
+            else:
+                record_id = record.get("id")
+                if type(record_id) is not int or record_id <= after_id:
+                    raise ValueError(f"Invalid {kind} ID")
+                if kind in ("heart", "oxygen"):
+                    field = "heart_rate" if kind == "heart" else "spo2"
+                    value = record.get(field)
+                    lower, upper = (35, 220) if kind == "heart" else (70, 100)
+                    if type(value) is not int or not lower <= value <= upper:
+                        raise ValueError(f"Invalid {kind} measurement")
+                    payload = {"kind": kind, "id": f"{kind}:{record_id}",
+                               "measured_at": measured_at,
+                               "bpm" if kind == "heart" else "spo2": value}
+                else:
+                    digest = record.get("digest")
+                    if (not isinstance(digest, str) or len(digest) != 64
+                            or any(c not in "0123456789abcdef" for c in digest)):
+                        raise ValueError("Invalid sleep digest")
+                    payload = dict(record)
+                    payload.pop("digest", None)
+                    payload.pop("id", None)
+                    payload.update(kind="sleep", id=f"sleep:{digest}")
+                cursor_value = record_id
             await self.hass.async_add_executor_job(
-                self.journal.insert, self.expected_device_id, "heart",
+                self.journal.insert, self.expected_device_id, kind,
                 payload["id"], measured_at, payload,
             )
-            await self.hass.async_add_executor_job(
-                self.journal.save_sync_cursor, self.expected_device_id, "heart", record_id
-            )
-            after_id = record_id
+            if kind == "steps":
+                await self.hass.async_add_executor_job(
+                    self.journal.save_steps_cursor, self.expected_device_id, cursor_value
+                )
+                after_date = cursor_value
+            else:
+                await self.hass.async_add_executor_job(
+                    self.journal.save_sync_cursor, self.expected_device_id, kind, cursor_value
+                )
+                after_id = cursor_value
             count += 1
-            if count % batch_size == 0:
-                _LOGGER.info("Watch Bridge GATT: heart history batch=%s cursor=%s", count // batch_size, after_id)
+        cursor = after_date if kind == "steps" else after_id
         _LOGGER.warning(
-            "Watch Bridge GATT: heart history received=%s cursor=%s complete=%s",
-            count, after_id, completed,
+            "Watch Bridge GATT: %s history received=%s cursor=%s complete=%s",
+            kind, count, cursor, completed,
         )
 
     def close(self):
