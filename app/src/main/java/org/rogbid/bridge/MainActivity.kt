@@ -180,27 +180,7 @@ class MainActivity : Activity() {
     prefs.getString("password", "")?.takeIf { it.isNotEmpty() }?.let { password = it.toCharArray() }
    }
    client.connect(options)
-   val device = JSONObject().apply {
-    put("identifiers", org.json.JSONArray().put("rogbid_$id"))
-    put("name", "Rogbid $id")
-    put("manufacturer", "Rogbid")
-    put("model", "Z10")
-   }
-   fun discovery(key: String, label: String, unit: String) {
-    val config = JSONObject().apply {
-     put("name", label)
-     put("unique_id", "rogbid_" + id + "_" + key)
-     put("state_topic", "rogbid/$id/measurements/" + key)
-     put("value_template", "{{ value_json." + key + " }}")
-     put("unit_of_measurement", unit)
-     put("state_class", "measurement")
-     put("device", device)
-    }
-    client.publish("homeassistant/sensor/rogbid_$id/$key/config",
-     MqttMessage(config.toString().toByteArray(Charsets.UTF_8)).apply { qos = 1; isRetained = true })
-   }
-   discovery("heart_rate", "Heart Rate", "bpm")
-   discovery("spo2", "SpO2", "%")
+   // Native HA integration manages discovery; only publish measurements.
    val data = JSONObject().put("measured_at", time).put("sensor_type", type)
    if (type == 21) data.put("heart_rate", heart) else data.put("spo2", oxygen)
    client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
@@ -597,42 +577,7 @@ class MainActivity : Activity() {
       }
       client.connect(options)
       val topic = "rogbid/" + id + "/state"
-      val device = JSONObject().apply {
-       put("identifiers", org.json.JSONArray().put("rogbid_" + id))
-       put("name", "Rogbid " + id)
-       put("manufacturer", "Rogbid")
-       put("model", "Z10")
-      }
-      fun discovery(key: String, label: String, unit: String?, deviceClass: String?, stateClass: String?) {
-       val config = JSONObject().apply {
-        put("name", label)
-        put("unique_id", "rogbid_" + id + "_" + key)
-        put("state_topic", topic)
-        put("value_template", "{{ value_json." + key + " }}")
-        put("availability_topic", topic)
-        put("availability_template", "{{ 'online' if value_json." + key + " is defined else 'offline' }}")
-        put("payload_available", "online")
-        put("payload_not_available", "offline")
-        put("device", device)
-        if (unit != null) put("unit_of_measurement", unit)
-        if (deviceClass != null) put("device_class", deviceClass)
-        if (stateClass != null) put("state_class", stateClass)
-       }
-       client.publish("homeassistant/sensor/rogbid_" + id + "/" + key + "/config",
-        MqttMessage(config.toString().toByteArray(Charsets.UTF_8)).apply {
-         qos = 1
-         isRetained = true
-        })
-      }
-      discovery("steps", L10n.text("steps"), "steps", null, "measurement")
-      // Direct measurements manage heart rate and SpO2 MQTT discovery.
-      discovery("last_update", "Last Update", null, "timestamp", null)
-      discovery("sleep_duration", "Sleep Duration", "min", "duration", "measurement")
-      discovery("sleep_deep", "Deep Sleep", "min", "duration", "measurement")
-      discovery("sleep_light", "Light Sleep", "min", "duration", "measurement")
-      discovery("sleep_fast", "Fast Sleep", "min", "duration", "measurement")
-      discovery("sleep_start", "Sleep Start", null, null, null)
-      discovery("sleep_end", "Wake Up", null, null, null)
+      // Native HA integration creates entities; avoid MQTT Discovery duplicates.
       client.publish(topic, MqttMessage(data.toString().toByteArray(Charsets.UTF_8)).apply {
        qos = 1
        isRetained = true
