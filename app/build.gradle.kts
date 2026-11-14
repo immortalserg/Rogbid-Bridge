@@ -9,8 +9,8 @@ android {
   applicationId = "org.rogbid.bridge"
   minSdk = 28
   targetSdk = 28
-  versionCode = 8
-  versionName = "0.6.0-dev"
+  versionCode = 9
+  versionName = "0.6.0"
  }
  lint {
   disable += "ExpiredTargetSdkVersion"
