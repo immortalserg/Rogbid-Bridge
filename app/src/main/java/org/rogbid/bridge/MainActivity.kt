@@ -719,7 +719,14 @@ class MainActivity : Activity() {
         return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
        }
        while (cursor.moveToNext() && records.size < 100) {
-        records.add("${value("date")} — ${value("steps")} ${L10n.text("steps")} — ${value("kcal")} ${L10n.text("calories")} — ${value("diatance")} ${L10n.text("distance")}")
+        // Vendor "kcal" values are calories; "diatance" values are metres.
+        val calories = value("kcal").replace(',', '.').toDoubleOrNull()
+        val distanceMetres = value("diatance").replace(',', '.').toDoubleOrNull()
+        val kilocalories = calories?.takeIf { it.isFinite() && it >= 0.0 }
+         ?.let { kotlin.math.round(it / 1000.0).toLong().toString() } ?: "—"
+        val kilometres = distanceMetres?.takeIf { it.isFinite() && it >= 0.0 }
+         ?.let { String.format(java.util.Locale.getDefault(), "%.1f", it / 1000.0) } ?: "—"
+        records.add("${value("date")} — ${value("steps")} ${L10n.text("steps")} — $kilocalories ${L10n.text("calories")} — $kilometres km")
        }
       }
      } else {
