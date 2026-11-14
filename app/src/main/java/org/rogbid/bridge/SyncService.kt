@@ -110,7 +110,7 @@ class SyncService : Service() {
   val notification = Notification.Builder(this, "sync")
    .setSmallIcon(android.R.drawable.stat_notify_sync)
    .setContentTitle("Rogbid Bridge")
-   .setContentText("MQTT background synchronization active")
+   .setContentText(L10n.text("sync_notification"))
    .setContentIntent(open)
    .setOngoing(true)
    .build()
