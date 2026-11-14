@@ -135,7 +135,7 @@ class SleepScreens(
   metricRow(root, "Пробуждения", "—", AWAKE_COLOR)
   val stages = try { JSONArray(record.optString("stages_json")) } catch (_: Exception) { JSONArray() }
   root.addView(SleepGraph(activity, stages, foreground).apply {
-   layoutParams = LinearLayout.LayoutParams(-1, dp(180))
+   layoutParams = LinearLayout.LayoutParams(-1, dp(90))
   })
   root.addView(button("Посмотреть историю") { history() })
   root.addView(button("Назад") { if (fromHistory) history() else onHome() })
@@ -158,8 +158,8 @@ class SleepScreens(
    super.onDraw(canvas)
    val left = 12f
    val right = width - 12f
-   val top = 18f
-   val bottom = height - 32f
+   val top = 2f
+   val bottom = height - 23f
    paint.color = textColor
    paint.textSize = 12f * resources.displayMetrics.scaledDensity
    if (stages.length() < 2) {
