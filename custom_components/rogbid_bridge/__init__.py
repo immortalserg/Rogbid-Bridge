@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .const import DOMAIN, CONF_DEVICE_ID
 from .storage import Journal
+from .websocket import async_register as register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
@@ -16,7 +17,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     journal = Journal(hass.config.path(".storage", "rogbid_bridge", f"{device_id}.sqlite3"))
     await hass.async_add_executor_job(journal.initialize)
     state = {}
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"state": state, "journal": journal}
+    devices = hass.data.setdefault(DOMAIN, {})
+    if not devices.get("_websocket_registered"):
+        register_websocket(hass)
+        devices["_websocket_registered"] = True
+    devices[entry.entry_id] = {"state": state, "journal": journal}
 
     async def on_state(msg):
         try:
