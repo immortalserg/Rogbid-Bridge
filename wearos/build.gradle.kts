@@ -20,4 +20,5 @@ android {
 }
 dependencies {
  implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+ implementation("androidx.health:health-services-client:1.0.0-rc02")
 }
