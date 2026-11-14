@@ -883,4 +883,15 @@ class MainActivity : Activity() {
  }
  override fun onBackPressed() { showHome() }
  override fun onDestroy() { stopMeasurement(); super.onDestroy() }
-}
+}     } else if (kind == "steps") {
+      contentResolver.query(Uri.parse("content://com.watchHealth.Walk/query"),
+       arrayOf("date", "steps", "kcal", "diatance"), null, null, "date DESC")?.use { cursor ->
+       fun value(name: String): String {
+        val index = cursor.getColumnIndex(name)
+        return if (index >= 0 && !cursor.isNull(index)) cursor.getString(index) else "—"
+       }
+       while (cursor.moveToNext() && records.size < 100) {
+        records.add("${value("date")} — ${value("steps")} шагов — ${value("kcal")} ккал — ${value("diatance")} расстояние")
+       }
+      }
+
