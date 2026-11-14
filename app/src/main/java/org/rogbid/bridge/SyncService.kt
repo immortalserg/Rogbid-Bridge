@@ -134,7 +134,7 @@ class SyncService : Service() {
   val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
   val host = prefs.getString("host", "") ?: ""
   val port = prefs.getString("port", "1883")?.toIntOrNull() ?: 1883
-  val id = prefs.getString("device", "king") ?: "king"
+  val id = WatchIdentity.id(this) ?: "king"
   if (host.isBlank() || !id.matches(Regex("[A-Za-z0-9_-]+"))) throw IllegalStateException("MQTT host or device ID missing")
   val data = JSONObject()
   data.put("steps", Settings.System.getInt(contentResolver, "today_steps"))
