@@ -137,6 +137,7 @@ class SleepScreens(
   root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(90))
   })
+  if (activity.getSharedPreferences("mqtt", Activity.MODE_PRIVATE).getBoolean("show_delete_buttons", false)) {
   addSpacedButton(root, "🗑 Delete this sleep record") {
    android.app.AlertDialog.Builder(activity)
     .setTitle("Delete sleep record?")
@@ -147,6 +148,7 @@ class SleepScreens(
      try { repo.delete(record.optLong("id")) } finally { repo.close() }
      history()
     }.show()
+  }
   }
   addSpacedButton(root, L10n.text("view_history")) { history() }
   addSpacedButton(root, L10n.text("back")) { if (fromHistory) history() else onHome() }
