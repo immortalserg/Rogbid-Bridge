@@ -35,14 +35,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.7.6 >/dev/null 2>&1; then
-            echo "Release v0.7.6 already exists; refusing to overwrite it"
+          if gh release view v0.7.7 >/dev/null 2>&1; then
+            echo "Release v0.7.7 already exists; refusing to overwrite it"
             exit 1
           fi
           cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
-          ## Rogbid Bridge v0.7.6 — Home Assistant integration
+          ## Rogbid Bridge v0.7.7 — Home Assistant integration
 
-          Adds admin-only deletion of individual Home Assistant history records with durable tombstones to prevent MQTT re-import.
+          Adds an opt-in delete-buttons setting to the Lovelace card visual editor. Delete controls are hidden by default.
 
           - Independent device IDs for multiple Rogbid watches
           - MQTT state sensors and SQLite-backed measurement journals
@@ -52,4 +52,4 @@ jobs:
 
           **HACS:** Add `immortalserg/Rogbid-Bridge` as a custom repository of type Integration. Restart Home Assistant after installation, then add Rogbid Bridge in Devices & Services.
           NOTES
-          gh release create v0.7.6 --target "$GITHUB_SHA" --title "Rogbid Bridge v0.7.6 — Home Assistant integration" --notes-file "$RUNNER_TEMP/notes.md" --latest
+          gh release create v0.7.7 --target "$GITHUB_SHA" --title "Rogbid Bridge v0.7.7 — Home Assistant integration" --notes-file "$RUNNER_TEMP/notes.md" --latest
