@@ -43,6 +43,38 @@ async def websocket_history(hass: HomeAssistant, connection, msg: dict) -> None:
     connection.send_result(msg["id"], {"records": rows})
 
 
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "rogbid_bridge/delete_record",
+    vol.Required("device_id"): str,
+    vol.Required("kind"): vol.In(KINDS),
+    vol.Required("record_id"): str,
+})
+@websocket_api.async_response
+async def websocket_delete_record(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Delete one local HA history record; never send a command to the watch."""
+    if not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
+    journal = None
+    for entry_id, item in hass.data.get(DOMAIN, {}).items():
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry and entry.data.get(CONF_DEVICE_ID) == msg["device_id"]:
+            journal = item["journal"]
+            break
+    if journal is None:
+        connection.send_error(msg["id"], "not_found", "Watch not configured")
+        return
+    try:
+        deleted = await hass.async_add_executor_job(
+            journal.delete, msg["device_id"], msg["kind"], msg["record_id"]
+        )
+    except Exception:
+        connection.send_error(msg["id"], "delete_failed", "Could not delete record")
+        return
+    connection.send_result(msg["id"], {"deleted": deleted})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "rogbid_bridge/devices"})
 @websocket_api.async_response
 async def websocket_devices(hass: HomeAssistant, connection, msg: dict) -> None:
@@ -59,3 +91,4 @@ def async_register(hass: HomeAssistant) -> None:
     """Register once, independently of the number of configured watches."""
     websocket_api.async_register_command(hass, websocket_history)
     websocket_api.async_register_command(hass, websocket_devices)
+    websocket_api.async_register_command(hass, websocket_delete_record)
