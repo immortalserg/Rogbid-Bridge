@@ -122,3 +122,40 @@ class Journal:
                     (device_id, kind, record_id),
                 )
             return result.rowcount == 1
+
+    def period_totals(self, device_id: str, today: str) -> dict:
+        """Rolling 7/30/365 calendar-day sums, including today, from daily journal."""
+        from datetime import date, timedelta
+        day = date.fromisoformat(today)
+        cutoff = (day - timedelta(days=364)).isoformat()
+        with sqlite3.connect(self.path) as db:
+            rows = db.execute(
+                """SELECT payload, measured_at FROM records
+                   WHERE device_id=? AND kind='steps' AND measured_at>=?
+                   ORDER BY measured_at DESC, received_at DESC""",
+                (device_id, cutoff),
+            ).fetchall()
+        totals = {f"{metric}_{period}d": 0 for metric in ("steps", "kcal", "km")
+                  for period in (7, 30, 365)}
+        seen = set()
+        for raw, measured_at in rows:
+            try:
+                record = json.loads(raw)
+                record_date = date.fromisoformat(record.get("date") or measured_at[:10])
+            except (ValueError, TypeError, json.JSONDecodeError):
+                continue
+            age = (day - record_date).days
+            if not 0 <= age < 365 or record_date in seen:
+                continue
+            seen.add(record_date)
+            for metric, key, divisor in (("steps", "steps", 1),
+                                         ("kcal", "kcal", 1000),
+                                         ("km", "diatance", 1000)):
+                value = record.get(key)
+                if type(value) not in (int, float) or not 0 <= value <= 1e9:
+                    continue
+                for period in (7, 30, 365):
+                    if age < period:
+                        totals[f"{metric}_{period}d"] += value / divisor
+        return {key: round(value, 2 if key.startswith("km_") else 0)
+                for key, value in totals.items()}

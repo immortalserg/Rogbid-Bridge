@@ -2,6 +2,8 @@
 import json
 import logging
 from pathlib import Path
+from homeassistant.util import dt as dt_util
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.components import mqtt, bluetooth
 from homeassistant.components.bluetooth import BluetoothScanningMode
 from homeassistant.components.http import StaticPathConfig
@@ -66,6 +68,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         latest = await hass.async_add_executor_job(journal.recent, device_id, history_kind, 1)
         if latest:
             state.update(sensor_values(history_kind, latest[0]))
+    async def refresh_periods():
+        today = dt_util.now().date().isoformat()
+        totals = await hass.async_add_executor_job(journal.period_totals, device_id, today)
+        state.update(totals)
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update")
+
+    await refresh_periods()
+    # Rolling windows shift at local midnight even without a new watch sync.
+    def on_midnight(_now):
+        hass.async_create_task(refresh_periods())
+
+    entry.async_on_unload(async_track_time_change(hass, on_midnight, hour=0, minute=0, second=0))
     devices = hass.data.setdefault(DOMAIN, {})
     if not devices.get("_websocket_registered"):
         register_websocket(hass)
@@ -83,6 +97,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
     def on_ble_record(kind, record):
+        if kind == "steps":
+            hass.async_create_task(refresh_periods())
         values = sensor_values(kind, record)
         if values:
             state.update(values)
