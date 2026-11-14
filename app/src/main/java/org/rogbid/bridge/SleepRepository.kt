@@ -81,6 +81,9 @@ class SleepRepository(context: Context) :
    }
   }
 
+ fun delete(id: Long): Boolean =
+  writableDatabase.delete("sleep_history", "id = ?", arrayOf(id.toString())) > 0
+
  fun latest(): JSONObject? {
   readableDatabase.rawQuery(
    "SELECT * FROM sleep_history ORDER BY sleep_date DESC, id DESC LIMIT 1", null
