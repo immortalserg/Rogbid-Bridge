@@ -795,7 +795,44 @@ class MainActivity : Activity() {
   val port = field(L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
   val user = field(L10n.text("username"), prefs.getString("user", "").orEmpty())
   val pass = field(L10n.text("password"), prefs.getString("password", "").orEmpty())
-  val device = field(L10n.text("device_id"), WatchIdentity.id(this)).apply { isEnabled = false }
+  // Show a readable pairing code instead of a clipped, disabled 36-character field.
+  // The full MQTT identity remains unchanged and is available for diagnostics.
+  val watchId = WatchIdentity.id(this)
+  val pairingCode = watchId.takeLast(8)
+  layout.addView(TextView(this).apply {
+   text = "Home Assistant · " + L10n.text("device_id")
+   textSize = 16f
+   setTextColor(currentSkin().foreground)
+  })
+  layout.addView(TextView(this).apply {
+   text = pairingCode
+   textSize = 26f
+   typeface = Typeface.MONOSPACE
+   setTextColor(currentSkin().accent)
+   setTextIsSelectable(true)
+  })
+  val showFullId = Button(this).apply { text = "Show full ID / Полный ID" }
+  val fullId = TextView(this).apply {
+   text = watchId.chunked(12).joinToString("\\n")
+   textSize = 14f
+   typeface = Typeface.MONOSPACE
+   setTextColor(currentSkin().foreground)
+   setTextIsSelectable(true)
+   visibility = android.view.View.GONE
+  }
+  showFullId.setOnClickListener {
+   fullId.visibility = if (fullId.visibility == android.view.View.VISIBLE)
+    android.view.View.GONE else android.view.View.VISIBLE
+  }
+  layout.addView(showFullId)
+  layout.addView(fullId)
+  val copyId = Button(this).apply { text = "Copy ID / Копировать ID" }
+  copyId.setOnClickListener {
+   val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+   clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid MQTT device ID", watchId))
+   notifyMessage(L10n.text("copied"))
+  }
+  layout.addView(copyId)
   val skinNames = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky").map { L10n.text(it) }.toTypedArray()
   val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   layout.addView(TextView(this).apply {
@@ -863,7 +900,7 @@ class MainActivity : Activity() {
   save.setOnClickListener {
    val p = port.text.toString().toIntOrNull()
    val intervalMinutes = interval.text.toString().toIntOrNull()
-   val d = device.text.toString().trim()
+   val d = watchId
    if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
     intervalMinutes == null || intervalMinutes !in 1..60 ||
     !d.matches(Regex("[A-Za-z0-9_-]+"))) {
