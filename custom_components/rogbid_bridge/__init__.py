@@ -50,6 +50,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not isinstance(payload, dict):
                 return
             kind = payload["kind"]
+            # Reject mismatches between the MQTT topic and JSON record kind.
+            if msg.topic != f"rogbid/{device_id}/history/{kind}":
+                _LOGGER.warning("Ignoring mismatched Rogbid history topic: %s", msg.topic)
+                return
             record_id = str(payload["id"])
             measured_at = payload["measured_at"]
             if kind not in ("heart", "oxygen", "steps", "sleep") or not isinstance(measured_at, str):
