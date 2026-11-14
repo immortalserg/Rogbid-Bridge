@@ -702,7 +702,7 @@ class MainActivity : Activity() {
       layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
       setPadding(0, 10, 0, 10)
      })
-     if (key != null) {
+     if (key != null && prefs.getBoolean("show_delete_buttons", false)) {
       val delete = Button(this).apply { text = "🗑" }
       styleButton(delete, skin)
       delete.setOnClickListener {
@@ -914,6 +914,12 @@ class MainActivity : Activity() {
    setTextColor(currentSkin().foreground)
   }
   layout.addView(autoSync)
+  val allowDelete = CheckBox(this).apply {
+   text = "Show history delete buttons / Показывать удаление записей"
+   isChecked = prefs.getBoolean("show_delete_buttons", false)
+   setTextColor(currentSkin().foreground)
+  }
+  layout.addView(allowDelete)
   val interval = field(L10n.text("sync_interval"),
    prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
   val save = Button(this).apply { text = L10n.text("save_settings") }
@@ -937,7 +943,8 @@ class MainActivity : Activity() {
       .putString("skin", skinKeys[skinChoice.selectedItemPosition])
       .putString("language", languageKeys[languageChoice.selectedItemPosition])
       .putInt("interval_minutes", intervalMinutes)
-      .putBoolean("auto", autoSync.isChecked).apply()
+      .putBoolean("auto", autoSync.isChecked)
+      .putBoolean("show_delete_buttons", allowDelete.isChecked).apply()
     if (autoSync.isChecked) {
      startForegroundService(Intent(this, SyncService::class.java))
     } else {
