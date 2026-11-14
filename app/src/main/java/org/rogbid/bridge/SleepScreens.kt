@@ -137,6 +137,17 @@ class SleepScreens(
   root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(90))
   })
+  addSpacedButton(root, "🗑 Delete this sleep record") {
+   android.app.AlertDialog.Builder(activity)
+    .setTitle("Delete sleep record?")
+    .setMessage("Delete only the local watch archive. Home Assistant history will be preserved.")
+    .setNegativeButton(android.R.string.cancel, null)
+    .setPositiveButton("Delete") { _, _ ->
+     val repo = SleepRepository(activity)
+     try { repo.delete(record.optLong("id")) } finally { repo.close() }
+     history()
+    }.show()
+  }
   addSpacedButton(root, L10n.text("view_history")) { history() }
   addSpacedButton(root, L10n.text("back")) { if (fromHistory) history() else onHome() }
  }
