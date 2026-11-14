@@ -12,33 +12,76 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.content.res.ColorStateList
+import android.util.TypedValue
 
 /** On-device capability probe. Does not advertise or expose health information. */
 class BleDiagnosticsActivity : Activity() {
  private lateinit var output: TextView
  private val permissionRequest = 4102
 
+ private data class Skin(val background: Int, val foreground: Int, val accent: Int, val button: Int)
+ private fun skin(): Skin = when (getSharedPreferences("mqtt", MODE_PRIVATE).getString("skin", "dark")) {
+  "light" -> Skin(Color.rgb(246,248,251), Color.rgb(25,36,50), Color.rgb(23,119,192), Color.rgb(225,235,244))
+  "forest" -> Skin(Color.rgb(13,40,34), Color.WHITE, Color.rgb(116,225,171), Color.rgb(28,75,63))
+  "sunset" -> Skin(Color.rgb(49,24,44), Color.WHITE, Color.rgb(255,170,108), Color.rgb(103,49,76))
+  "pink" -> Skin(Color.rgb(255,232,242), Color.rgb(83,35,64), Color.rgb(184,49,111), Color.rgb(250,192,218))
+  "lavender" -> Skin(Color.rgb(244,238,255), Color.rgb(56,42,87), Color.rgb(112,74,181), Color.rgb(221,207,246))
+  "mint" -> Skin(Color.rgb(232,251,243), Color.rgb(25,72,58), Color.rgb(22,137,105), Color.rgb(189,235,217))
+  "cream" -> Skin(Color.rgb(255,249,232), Color.rgb(78,59,35), Color.rgb(164,104,40), Color.rgb(246,226,187))
+  "sky" -> Skin(Color.rgb(232,246,255), Color.rgb(30,60,91), Color.rgb(36,115,184), Color.rgb(196,227,247))
+  else -> Skin(Color.rgb(17,21,31), Color.WHITE, Color.rgb(105,187,255), Color.rgb(42,51,69))
+ }
+ private fun button(label: String, colors: Skin): Button = Button(this).apply {
+  text = label
+  isAllCaps = false
+  setTextColor(colors.foreground)
+  setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+  setAutoSizeTextTypeUniformWithConfiguration(13, 18, 1, TypedValue.COMPLEX_UNIT_SP)
+  val radius = 18f * resources.displayMetrics.density
+  val shape = GradientDrawable().apply { setColor(colors.button); cornerRadius = radius }
+  val mask = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = radius }
+  background = RippleDrawable(ColorStateList.valueOf(colors.accent and 0x00FFFFFF or 0x66000000),
+   shape, mask)
+  layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+   (52 * resources.displayMetrics.density).toInt()).apply {
+   bottomMargin = (8 * resources.displayMetrics.density).toInt()
+  }
+ }
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  val colors = skin()
   val column = LinearLayout(this).apply {
    orientation = LinearLayout.VERTICAL
-   setPadding(20, 20, 20, 20)
+   setPadding(16, 16, 16, 16)
+   setBackgroundColor(colors.background)
   }
   column.addView(TextView(this).apply {
    text = "BLE diagnostics / Диагностика BLE"
-   textSize = 20f
+   textSize = 22f
+   setTextColor(colors.foreground)
   })
-  output = TextView(this).apply { textSize = 15f }
-  val run = Button(this).apply { text = "Check BLE / Проверить BLE" }
-  val start = Button(this).apply { text = "Start BLE GATT / Включить BLE" }
-  val stop = Button(this).apply { text = "Stop BLE GATT / Выключить BLE" }
-  val back = Button(this).apply { text = "Back / Назад" }
+  output = TextView(this).apply {
+   textSize = 16f
+   setTextColor(colors.foreground)
+   setPadding(4, 12, 4, 12)
+  }
+  val run = button("Check BLE / Проверить BLE", colors)
+  val start = button("Start BLE GATT / Включить BLE", colors)
+  val stop = button("Stop BLE GATT / Выключить BLE", colors)
+  val back = button("Back / Назад", colors)
   column.addView(run)
   column.addView(start)
   column.addView(stop)
   column.addView(output)
   column.addView(back)
-  setContentView(ScrollView(this).apply { addView(column) })
+  setContentView(ScrollView(this).apply {
+   setBackgroundColor(colors.background)
+   addView(column)
+  })
   run.setOnClickListener { checkCapabilities() }
   start.setOnClickListener {
    startService(Intent(this, BleGattService::class.java))
