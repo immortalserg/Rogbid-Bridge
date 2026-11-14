@@ -33,7 +33,10 @@ class RogbidHistoryCard extends HTMLElement {
   disconnectedCallback() { this._loaded = false; }
 
   async _load() {
-    if (!this._hass || this._loading) return;
+    if (!this._hass) return;
+    const kind = this._kind;
+    const request = (this._requestId || 0) + 1;
+    this._requestId = request;
     this._loading = true;
     this._error = "";
     this._render();
@@ -41,16 +44,20 @@ class RogbidHistoryCard extends HTMLElement {
       const result = await this._hass.callWS({
         type: "rogbid_bridge/history",
         device_id: this._config.device_id,
-        kind: this._kind,
+        kind,
         limit: 200
       });
-      this._rows = result.records || [];
+      if (request === this._requestId) this._rows = result.records || [];
     } catch (error) {
-      this._rows = [];
-      this._error = String(error.message || error);
+      if (request === this._requestId) {
+        this._rows = [];
+        this._error = String(error.message || error);
+      }
     } finally {
-      this._loading = false;
-      this._render();
+      if (request === this._requestId) {
+        this._loading = false;
+        this._render();
+      }
     }
   }
 
