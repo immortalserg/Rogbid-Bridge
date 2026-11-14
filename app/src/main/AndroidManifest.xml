@@ -4,8 +4,13 @@
  <uses-permission android:name="android.permission.BODY_SENSORS" />
  <uses-permission android:name="com.wiite.provider" />
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+ <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+ <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+ <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+ <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
  <application android:label="Rogbid Bridge" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
   <service android:name=".SyncService" android:exported="false" />
+  <activity android:name=".BleDiagnosticsActivity" android:exported="false" />
   <activity android:name=".MainActivity" android:exported="true">
    <intent-filter>
     <action android:name="android.intent.action.MAIN" />
