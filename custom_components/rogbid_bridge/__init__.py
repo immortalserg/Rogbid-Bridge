@@ -1,7 +1,9 @@
 """Rogbid Bridge integration: MQTT transport and durable event journal."""
 import json
 import logging
+from pathlib import Path
 from homeassistant.components import mqtt
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -21,6 +23,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not devices.get("_websocket_registered"):
         register_websocket(hass)
         devices["_websocket_registered"] = True
+    if not devices.get("_card_registered"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                "/rogbid_bridge/rogbid-history-card.js",
+                str(Path(__file__).with_name("rogbid-history-card.js")),
+                False,
+            )
+        ])
+        devices["_card_registered"] = True
     devices[entry.entry_id] = {"state": state, "journal": journal}
 
     async def on_state(msg):
