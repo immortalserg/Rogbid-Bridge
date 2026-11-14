@@ -56,6 +56,24 @@ class Journal:
                 (device_id, kind, last_id),
             )
 
+    def get_steps_cursor(self, device_id: str) -> str:
+        """Return previous completed date; replay latest day for changing totals."""
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS steps_sync (
+                device_id TEXT PRIMARY KEY, last_date TEXT NOT NULL
+            )""")
+            row = db.execute("SELECT last_date FROM steps_sync WHERE device_id=?", (device_id,)).fetchone()
+            return row[0] if row else ""
+
+    def save_steps_cursor(self, device_id: str, date: str) -> None:
+        with sqlite3.connect(self.path) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS steps_sync (
+                device_id TEXT PRIMARY KEY, last_date TEXT NOT NULL
+            )""")
+            db.execute("""INSERT INTO steps_sync (device_id, last_date) VALUES (?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET last_date=MAX(last_date, excluded.last_date)""",
+                (device_id, date))
+
     def insert(self, device_id: str, kind: str, record_id: str, measured_at: str, payload: dict) -> bool:
         with sqlite3.connect(self.path) as db:
             if db.execute(
