@@ -1,5 +1,6 @@
 """One-shot GATT diagnostic for discovered Watch Bridge BLE advertisements."""
 import asyncio
+import base64
 import json
 import logging
 import time
@@ -147,12 +148,43 @@ class GattDiagnostics:
                 request["after_date"] = after_date
             else:
                 request["after_id"] = after_id
-            await asyncio.wait_for(
-                client.write_gatt_char(REQUEST_UUID, json.dumps(request).encode(), response=True),
-                timeout=10,
-            )
-            raw = await asyncio.wait_for(client.read_gatt_char(STREAM_UUID), timeout=10)
-            reply = json.loads(bytes(raw).decode())
+            if kind == "sleep":
+                # Android sends small base64 fragments to avoid GATT MTU truncation.
+                fragments = bytearray()
+                total = None
+                while True:
+                    request["offset"] = len(fragments)
+                    await asyncio.wait_for(
+                        client.write_gatt_char(REQUEST_UUID, json.dumps(request).encode(),
+                                               response=True), timeout=10,
+                    )
+                    raw = await asyncio.wait_for(client.read_gatt_char(STREAM_UUID), timeout=10)
+                    envelope = json.loads(bytes(raw).decode())
+                    if (not isinstance(envelope, dict)
+                            or envelope.get("type") != "sleep_history_chunk"
+                            or envelope.get("offset") != len(fragments)
+                            or type(envelope.get("total")) is not int):
+                        raise ValueError("Invalid sleep chunk header")
+                    if total is None:
+                        total = envelope["total"]
+                        if not 1 <= total <= 262144:
+                            raise ValueError("Invalid sleep payload length")
+                    if envelope["total"] != total:
+                        raise ValueError("Sleep payload changed during transfer")
+                    fragment = base64.b64decode(envelope["data"], validate=True)
+                    if not fragment or len(fragment) > 64 or len(fragments) + len(fragment) > total:
+                        raise ValueError("Invalid sleep chunk size")
+                    fragments.extend(fragment)
+                    if len(fragments) == total:
+                        break
+                reply = json.loads(fragments.decode("utf-8"))
+            else:
+                await asyncio.wait_for(
+                    client.write_gatt_char(REQUEST_UUID, json.dumps(request).encode(),
+                                           response=True), timeout=10,
+                )
+                raw = await asyncio.wait_for(client.read_gatt_char(STREAM_UUID), timeout=10)
+                reply = json.loads(bytes(raw).decode())
             if not isinstance(reply, dict) or reply.get("type") != request["type"]:
                 raise ValueError(f"Unexpected {kind} history response")
             if reply.get("done") is True:
