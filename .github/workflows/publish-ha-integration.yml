@@ -1,0 +1,55 @@
+name: Publish Home Assistant integration for HACS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-ha-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Home Assistant integration
+        run: |
+          set -euo pipefail
+          test -f hacs.json
+          test -f custom_components/rogbid_bridge/manifest.json
+          test -f custom_components/rogbid_bridge/config_flow.py
+          python -m compileall -q custom_components/rogbid_bridge
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path('custom_components/rogbid_bridge/manifest.json').read_text())
+          assert m['domain'] == 'rogbid_bridge'
+          assert m['config_flow'] is True
+          PY
+      - name: Publish HACS-compatible release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.7.0 >/dev/null 2>&1; then
+            echo "Release v0.7.0 already exists; refusing to overwrite it"
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## Rogbid Bridge v0.7.0 — Home Assistant integration
+
+          Adds a native Home Assistant integration installable from HACS using this repository as a custom Integration repository.
+
+          - Independent device IDs for multiple Rogbid watches
+          - MQTT state sensors and SQLite-backed measurement journals
+          - Lovelace history card for heart rate, oxygen, steps and sleep
+
+          **Android APK:** This release does not contain an APK. Use the signed APK artifact from the Android APK workflow for the test version. The previous v0.6.0 APK release remains available.
+
+          **HACS:** Add `immortalserg/Rogbid-Bridge` as a custom repository of type Integration. Restart Home Assistant after installation, then add Rogbid Bridge in Devices & Services.
+          NOTES
+          gh release create v0.7.0 --target "$GITHUB_SHA" --title "Rogbid Bridge v0.7.0 — Home Assistant integration" --notes-file "$RUNNER_TEMP/notes.md" --latest
