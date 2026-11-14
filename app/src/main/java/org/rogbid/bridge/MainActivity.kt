@@ -803,115 +803,154 @@ class MainActivity : Activity() {
   back.setOnClickListener { showJournal("sleep") }
   show(layout)
  }
- private fun showSettings() {
-  val layout = page()
-  layout.addView(TextView(this).apply { text = L10n.text("settings"); textSize = 22f; setTextColor(currentSkin().foreground) })
-  fun field(label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText =
-   EditText(this).apply {
-    hint = label
-    setText(value)
-    inputType = type
-    setTextColor(currentSkin().foreground)
-    setHintTextColor((currentSkin().foreground and 0x00FFFFFF) or 0x99000000.toInt())
-    setSingleLine(true)
-    layout.addView(this)
-   }
-  val host = field(L10n.text("host"), prefs.getString("host", "").orEmpty())
-  val port = field(L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
-  val user = field(L10n.text("username"), prefs.getString("user", "").orEmpty())
-  val pass = field(L10n.text("password"), prefs.getString("password", "").orEmpty())
-  // Show a readable pairing code instead of a clipped, disabled 36-character field.
-  // The full MQTT identity remains unchanged and is available for diagnostics.
-  val watchId = WatchIdentity.id(this)
-  val pairingCode = watchId.takeLast(8)
+ private fun settingsButton(label: String, action: () -> Unit): Button =
+  Button(this).apply {
+   text = label
+   styleButton(this, currentSkin())
+   setOnClickListener { action() }
+  }
+
+ private fun settingsTitle(layout: LinearLayout, title: String) {
   layout.addView(TextView(this).apply {
-   text = "Home Assistant · " + L10n.text("device_id")
-   textSize = 16f
+   text = title
+   textSize = 22f
    setTextColor(currentSkin().foreground)
   })
-  layout.addView(TextView(this).apply {
-   text = pairingCode
-   textSize = 26f
-   typeface = Typeface.MONOSPACE
-   setTextColor(currentSkin().accent)
-   setTextIsSelectable(true)
+ }
+
+ private fun settingsField(layout: LinearLayout, label: String, value: String,
+                           type: Int = InputType.TYPE_CLASS_TEXT): EditText =
+  EditText(this).apply {
+   hint = label
+   setText(value)
+   inputType = type
+   setTextColor(currentSkin().foreground)
+   setHintTextColor(currentSkin().foreground)
+   setSingleLine(true)
+   layout.addView(this)
+  }
+
+ private fun showSettings() {
+  val layout = page()
+  settingsTitle(layout, L10n.text("settings"))
+  layout.addView(settingsButton("MQTT") { showMqttSettings() })
+  layout.addView(settingsButton("Home Assistant") { showHomeAssistantSettings() })
+  layout.addView(settingsButton("Bluetooth") { showBluetoothSettings() })
+  layout.addView(settingsButton(L10n.text("appearance") + " / " + L10n.text("settings")) {
+   showAppSettings()
   })
-  val showFullId = Button(this).apply { text = "Show full ID / Полный ID" }
+  layout.addView(settingsButton(L10n.text("back")) { showHome() })
+  show(layout)
+ }
+
+ private fun showMqttSettings() {
+  val layout = page()
+  settingsTitle(layout, "MQTT")
+  val host = settingsField(layout, L10n.text("host"), prefs.getString("host", "").orEmpty())
+  val port = settingsField(layout, L10n.text("port"), prefs.getString("port", "1883").orEmpty(), InputType.TYPE_CLASS_NUMBER)
+  val user = settingsField(layout, L10n.text("username"), prefs.getString("user", "").orEmpty())
+  val pass = settingsField(layout, L10n.text("password"), prefs.getString("password", "").orEmpty())
+  layout.addView(settingsButton(L10n.text("save_settings")) {
+   val number = port.text.toString().toIntOrNull()
+   if (number == null || number !in 1..65535) {
+    notifyMessage(L10n.text("invalid_settings"))
+   } else {
+    prefs.edit().putString("host", host.text.toString().trim())
+     .putString("port", number.toString()).putString("user", user.text.toString())
+     .putString("password", pass.text.toString()).apply()
+    showSettings()
+   }
+  })
+  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
+  show(layout)
+ }
+
+ private fun showHomeAssistantSettings() {
+  val layout = page()
+  settingsTitle(layout, "Home Assistant")
+  val watchId = WatchIdentity.id(this)
+  layout.addView(TextView(this).apply {
+   text = L10n.text("device_id") + ": " + watchId.takeLast(8)
+   textSize = 18f
+   setTextColor(currentSkin().foreground)
+  })
   val fullId = TextView(this).apply {
-   text = watchId.chunked(12).joinToString("\n")
+   text = watchId.chunked(12).joinToString("\\n")
    textSize = 14f
    typeface = Typeface.MONOSPACE
    setTextColor(currentSkin().foreground)
    setTextIsSelectable(true)
    visibility = android.view.View.GONE
   }
-  showFullId.setOnClickListener {
+  layout.addView(settingsButton("Show full ID / Полный ID") {
    fullId.visibility = if (fullId.visibility == android.view.View.VISIBLE)
     android.view.View.GONE else android.view.View.VISIBLE
-  }
-  layout.addView(showFullId)
+  })
   layout.addView(fullId)
-  val copyId = Button(this).apply { text = "Copy ID / Копировать ID" }
-  copyId.setOnClickListener {
+  layout.addView(settingsButton("Copy ID / Копировать ID") {
    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Rogbid MQTT device ID", watchId))
    notifyMessage(L10n.text("copied"))
+  })
+  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
+  show(layout)
+ }
+
+ private fun showBluetoothSettings() {
+  val layout = page()
+  settingsTitle(layout, "Bluetooth")
+  layout.addView(settingsButton("Bluetooth BLE — диагностика / Diagnostics") {
+   startActivity(Intent(this, BleDiagnosticsActivity::class.java))
+  })
+  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
+  show(layout)
+ }
+
+ private fun settingsSpinner(layout: LinearLayout, names: Array<String>, selection: Int): Spinner {
+  val skin = currentSkin()
+  return Spinner(this).apply {
+   adapter = object : ArrayAdapter<String>(this@MainActivity,
+    android.R.layout.simple_spinner_item, names) {
+    override fun getView(position: Int, convertView: android.view.View?,
+                         parent: android.view.ViewGroup): android.view.View =
+     super.getView(position, convertView, parent).also {
+      (it as? TextView)?.setTextColor(skin.foreground)
+     }
+    override fun getDropDownView(position: Int, convertView: android.view.View?,
+                                 parent: android.view.ViewGroup): android.view.View =
+     super.getDropDownView(position, convertView, parent).also {
+      (it as? TextView)?.apply {
+       setTextColor(skin.foreground)
+       setBackgroundColor(skin.button)
+      }
+     }
+   }
+   setSelection(selection.coerceAtLeast(0))
+   layout.addView(this)
   }
-  layout.addView(copyId)
-  val skinNames = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky").map { L10n.text(it) }.toTypedArray()
+ }
+
+ private fun showAppSettings() {
+  val layout = page()
+  settingsTitle(layout, L10n.text("settings"))
   val skinKeys = arrayOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
+  val skinLabels = arrayOf("dark", "light_theme", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
+   .map { L10n.text(it) }.toTypedArray()
   layout.addView(TextView(this).apply {
-   text = L10n.text("appearance"); textSize = 18f; setTextColor(currentSkin().foreground)
+   text = L10n.text("appearance")
+   setTextColor(currentSkin().foreground)
   })
-  val skinChoice = Spinner(this)
-  val spinnerSkin = currentSkin()
-  skinChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, skinNames) {
-   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-    return super.getView(position, convertView, parent).also { view ->
-     (view as? TextView)?.apply {
-      setTextColor(spinnerSkin.foreground)
-      setPadding(12, 8, 12, 8)
-     }
-    }
-   }
-   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-    return super.getDropDownView(position, convertView, parent).also { view ->
-     (view as? TextView)?.apply {
-      setTextColor(spinnerSkin.foreground)
-      setBackgroundColor(spinnerSkin.button)
-      setPadding(16, 12, 16, 12)
-     }
-    }
-   }
-  }
-  skinChoice.setSelection(skinKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
-  layout.addView(skinChoice)
-  layout.addView(TextView(this).apply {
-   text = L10n.text("language"); textSize = 18f; setTextColor(currentSkin().foreground)
-  })
+  val skinChoice = settingsSpinner(layout, skinLabels,
+   skinKeys.indexOf(prefs.getString("skin", "dark")))
   val languageKeys = arrayOf("system", "ru", "en", "fr", "de", "lb", "it", "pt", "es")
-  val languageNames = arrayOf("System / Автоматически", "Русский", "English", "Français", "Deutsch", "Lëtzebuergesch", "Italiano", "Português", "Español")
-  val languageChoice = Spinner(this)
-  languageChoice.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, languageNames) {
-   override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
-    super.getView(position, convertView, parent).also { view ->
-     (view as? TextView)?.apply { setTextColor(spinnerSkin.foreground); setPadding(12, 8, 12, 8) }
-    }
-   override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View =
-    super.getDropDownView(position, convertView, parent).also { view ->
-     (view as? TextView)?.apply {
-      setTextColor(spinnerSkin.foreground)
-      setBackgroundColor(spinnerSkin.button)
-      setPadding(16, 12, 16, 12)
-     }
-    }
-  }
-  languageChoice.setSelection(languageKeys.indexOf(prefs.getString("language", "system")).coerceAtLeast(0))
-  layout.addView(languageChoice)
-  val bleDiagnostics = Button(this).apply { text = "Bluetooth BLE — диагностика / Diagnostics" }
-  styleButton(bleDiagnostics, currentSkin())
-  bleDiagnostics.setOnClickListener { startActivity(Intent(this, BleDiagnosticsActivity::class.java)) }
-  layout.addView(bleDiagnostics)
+  val languageLabels = arrayOf("System / Автоматически", "Русский", "English", "Français",
+   "Deutsch", "Lëtzebuergesch", "Italiano", "Português", "Español")
+  layout.addView(TextView(this).apply {
+   text = L10n.text("language")
+   setTextColor(currentSkin().foreground)
+  })
+  val languageChoice = settingsSpinner(layout, languageLabels,
+   languageKeys.indexOf(prefs.getString("language", "system")))
   val autoSync = CheckBox(this).apply {
    text = L10n.text("auto_sync")
    isChecked = prefs.getBoolean("auto", false)
@@ -924,41 +963,24 @@ class MainActivity : Activity() {
    setTextColor(currentSkin().foreground)
   }
   layout.addView(allowDelete)
-  val interval = field(L10n.text("sync_interval"),
+  val interval = settingsField(layout, L10n.text("sync_interval"),
    prefs.getInt("interval_minutes", 1).toString(), InputType.TYPE_CLASS_NUMBER)
-  val save = Button(this).apply { text = L10n.text("save_settings") }
-  val back = Button(this).apply { text = L10n.text("back") }
-  val status = TextView(this).apply { setTextColor(currentSkin().foreground) }
-  layout.addView(save)
-  layout.addView(back)
-  layout.addView(status)
-  save.setOnClickListener {
-   val p = port.text.toString().toIntOrNull()
-   val intervalMinutes = interval.text.toString().toIntOrNull()
-   val d = watchId
-   if (host.text.toString().trim().isEmpty() || p == null || p !in 1..65535 ||
-    intervalMinutes == null || intervalMinutes !in 1..60 ||
-    !d.matches(Regex("[A-Za-z0-9_-]+"))) {
-    status.text = L10n.text("invalid_settings")
+  layout.addView(settingsButton(L10n.text("save_settings")) {
+   val minutes = interval.text.toString().toIntOrNull()
+   if (minutes == null || minutes !in 1..60) {
+    notifyMessage(L10n.text("invalid_settings"))
    } else {
-    prefs.edit().putString("host", host.text.toString().trim())
-     .putString("port", p.toString()).putString("user", user.text.toString())
-     .putString("password", pass.text.toString())
-      .putString("skin", skinKeys[skinChoice.selectedItemPosition])
-      .putString("language", languageKeys[languageChoice.selectedItemPosition])
-      .putInt("interval_minutes", intervalMinutes)
-      .putBoolean("auto", autoSync.isChecked)
-      .putBoolean("show_delete_buttons", allowDelete.isChecked).apply()
-    if (autoSync.isChecked) {
-     startForegroundService(Intent(this, SyncService::class.java))
-    } else {
-     stopService(Intent(this, SyncService::class.java))
-    }
+    prefs.edit().putString("skin", skinKeys[skinChoice.selectedItemPosition])
+     .putString("language", languageKeys[languageChoice.selectedItemPosition])
+     .putInt("interval_minutes", minutes).putBoolean("auto", autoSync.isChecked)
+     .putBoolean("show_delete_buttons", allowDelete.isChecked).apply()
+    if (autoSync.isChecked) startForegroundService(Intent(this, SyncService::class.java))
+    else stopService(Intent(this, SyncService::class.java))
     L10n.init(this)
-    showHome()
+    showSettings()
    }
-  }
-  back.setOnClickListener { showHome() }
+  })
+  layout.addView(settingsButton(L10n.text("back")) { showSettings() })
   show(layout)
  }
  override fun onBackPressed() { showHome() }
