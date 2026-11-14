@@ -121,12 +121,16 @@ class GattDiagnostics:
 
 
     async def _read_heart_history(self, client):
-        """Resume heart history from a durable cursor, up to ten records per connection."""
+        """Resume history in ten-record batches, bounded per connection."""
         after_id = await self.hass.async_add_executor_job(
             self.journal.get_sync_cursor, self.expected_device_id, "heart"
         )
         count = 0
-        for _ in range(10):
+        batch_size = 10
+        max_records = 100
+        deadline = time.monotonic() + 45
+        completed = False
+        while count < max_records and time.monotonic() < deadline:
             request = json.dumps({"type": "heart_history", "after_id": after_id})
             await asyncio.wait_for(
                 client.write_gatt_char(REQUEST_UUID, request.encode(), response=True),
@@ -137,6 +141,7 @@ class GattDiagnostics:
             if not isinstance(reply, dict) or reply.get("type") != "heart_history":
                 raise ValueError("Unexpected heart_history response")
             if reply.get("done") is True:
+                completed = True
                 break
             record = reply.get("record")
             if not isinstance(record, dict):
@@ -159,7 +164,12 @@ class GattDiagnostics:
             )
             after_id = record_id
             count += 1
-        _LOGGER.warning("Watch Bridge GATT: heart history received=%s cursor=%s", count, after_id)
+            if count % batch_size == 0:
+                _LOGGER.info("Watch Bridge GATT: heart history batch=%s cursor=%s", count // batch_size, after_id)
+        _LOGGER.warning(
+            "Watch Bridge GATT: heart history received=%s cursor=%s complete=%s",
+            count, after_id, completed,
+        )
 
     def close(self):
         if self.task is not None and not self.task.done():
