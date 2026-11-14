@@ -19,7 +19,7 @@ import java.util.UUID
 import org.json.JSONObject
 
 /**
- * First BLE transport milestone: a discoverable, read-only GATT endpoint.
+ * BLE transport: discoverable GATT endpoint with device identity handshake.
  * Does NOT send health records. The sync protocol will be implemented separately.
  */
 class BleGattService : Service() {
@@ -55,7 +55,7 @@ class BleGattService : Service() {
     try {
      val request = JSONObject(String(value, Charsets.UTF_8))
      if (request.optString("type") == "device_info") {
-      val id = WatchIdentity.id(this@BleGattService)?.trim().orEmpty()
+      val id = WatchIdentity.id(this@BleGattService).trim()
       if (id.isNotEmpty()) {
        synchronized(this@BleGattService) {
         response = JSONObject().put("type", "device_info")
