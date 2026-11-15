@@ -67,6 +67,14 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(client.stopped)
         self.assertFalse(client.is_connected)
 
+    async def test_disconnect_event(self):
+        readings = []
+        client = FakeClient("fake", 20)
+        async with transport.HeartRateSession("fake", readings.append,
+                                              client_factory=lambda *a, **k: client) as session:
+            session._on_disconnect(client)
+            await asyncio.wait_for(session.wait_disconnected(), timeout=1)
+
     async def test_missing_service_disconnects(self):
         client = FakeClient("fake", 20, available=False)
         with self.assertRaises(base.DriverError):
