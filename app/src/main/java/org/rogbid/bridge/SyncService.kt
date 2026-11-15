@@ -79,8 +79,9 @@ class SyncService : Service() {
    handler.postDelayed({ pollSleep(generation) }, 2000L)
   }
  }
- private fun intervalMs(): Long = (getSharedPreferences("mqtt", MODE_PRIVATE)
-  .getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L)
+ private fun intervalMs(): Long = if (getSharedPreferences("mqtt", MODE_PRIVATE).getBoolean("auto", false))
+  getSharedPreferences("mqtt", MODE_PRIVATE).getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L
+ else 60_000L
  private val sync = object : Runnable {
   override fun run() {
    if (!running) return
@@ -97,8 +98,10 @@ class SyncService : Service() {
     val generation = ++sleepPollGeneration
     sendBroadcast(Intent("com.wiite.get.sleep.data"))
     handler.postDelayed({ pollSleep(generation) }, 3000L)
-    publish()
-    prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
+    if (prefs.getBoolean("auto", false)) {
+     publish()
+     prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
+    }
    } catch (e: Exception) {
     prefs.edit().putString("last_sync", "ERROR: " + e.javaClass.simpleName + ": " + e.message).apply()
     android.util.Log.e("RogbidBridge", "MQTT sync failed", e)
@@ -128,9 +131,8 @@ class SyncService : Service() {
  }
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   if (intent?.action == "STOP") {
+   // STOP now disables MQTT publishing, not local sleep collection.
    getSharedPreferences("mqtt", MODE_PRIVATE).edit().putBoolean("auto", false).apply()
-   stopSelf()
-   return START_NOT_STICKY
   }
   if (!running) running = true
   handler.removeCallbacks(sync)
