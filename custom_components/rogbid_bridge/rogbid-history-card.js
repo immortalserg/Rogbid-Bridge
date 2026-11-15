@@ -5,6 +5,7 @@ const historyKind = kind => EXTRA_KINDS.includes(kind) ? "steps" : kind;
 const viewForKind = (config,kind) => config?.view_modes?.[kind] || config?.view_mode || "table";
 const TOTAL_KINDS = ["steps","kcal","km"];
 const showTotals = (config,kind) => config?.show_totals?.[kind] === true;
+const showToday = (config,kind) => config?.show_today?.[kind] !== false;
 const monthlyOptions = (config,kind) => config?.monthly_charts?.[kind] || {};
 const showMonthly = (config,kind) => TOTAL_KINDS.includes(kind) && monthlyOptions(config,kind).enabled === true;
 const dailyDate = raw => {
@@ -27,6 +28,9 @@ const orderKinds = v => {
 
 
 const ROGBID_TRANSLATIONS = {"en":{"heart":"Pulse","oxygen":"Oxygen","steps":"Steps","sleep":"Sleep","date":"Date","wakeDate":"Wake date","duration":"Duration","deep":"Deep","light":"Light","score":"Score","delete":"Delete","loading":"Loading…","empty":"No records yet","noWatch":"No watches configured","showTitle":"Show title","sections":"Visible sections","order":"Button order","limit":"History records (1–500)","height":"History height (px)","display":"History display","table":"Table","graph":"Graph","showDelete":"Show delete buttons","language":"Language","haLanguage":"Home Assistant language","autoWatch":"Automatic watch","cardTitle":"Card title","noNumeric":"No numeric data","noStages":"No sleep stages available","invalidStages":"No valid stage timeline","other":"Other / end","refresh":"Refresh history","confirmDelete":"Delete record from Home Assistant? It will remain on the watch.","deleteError":"Could not delete record","watch":"Watch"},"ru":{"heart":"Пульс","oxygen":"Кислород","steps":"Шаги","sleep":"Сон","date":"Дата","wakeDate":"Дата пробуждения","duration":"Продолжительность","deep":"Глубокий","light":"Лёгкий","score":"Оценка","delete":"Удалить","loading":"Загрузка…","empty":"Записей пока нет","noWatch":"Часы не настроены","showTitle":"Показывать заголовок","sections":"Отображаемые разделы","order":"Порядок кнопок","limit":"Количество записей (1–500)","height":"Высота истории (пикс.)","display":"Отображение истории","table":"Таблица","graph":"График","showDelete":"Показывать кнопки удаления","language":"Язык","haLanguage":"Язык Home Assistant","autoWatch":"Автоматический выбор часов","cardTitle":"Заголовок карточки","noNumeric":"Нет числовых данных","noStages":"Нет данных о фазах сна","invalidStages":"Некорректная шкала фаз сна","other":"Другое / конец","refresh":"Обновить историю","confirmDelete":"Удалить запись из Home Assistant? На часах она останется.","deleteError":"Не удалось удалить запись","watch":"Часы"},"fr":{"heart":"Pouls","oxygen":"Oxygène","steps":"Pas","sleep":"Sommeil","date":"Date","wakeDate":"Date de réveil","duration":"Durée","deep":"Profond","light":"Léger","score":"Score","delete":"Supprimer","loading":"Chargement…","empty":"Aucune donnée","noWatch":"Aucune montre configurée","showTitle":"Afficher le titre","sections":"Sections visibles","order":"Ordre des boutons","limit":"Enregistrements (1–500)","height":"Hauteur (px)","display":"Affichage de l'historique","table":"Tableau","graph":"Graphique","showDelete":"Afficher les boutons de suppression","language":"Langue","haLanguage":"Langue de Home Assistant","autoWatch":"Montre automatique","cardTitle":"Titre de la carte","noNumeric":"Aucune donnée numérique","noStages":"Aucune phase de sommeil","invalidStages":"Chronologie invalide","other":"Autre / fin","refresh":"Actualiser","confirmDelete":"Supprimer de Home Assistant ? La montre conserve cette donnée.","deleteError":"Suppression impossible","watch":"Montre"},"de":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schritte","sleep":"Schlaf","date":"Datum","wakeDate":"Aufwachdatum","duration":"Dauer","deep":"Tief","light":"Leicht","score":"Bewertung","delete":"Löschen","loading":"Laden…","empty":"Keine Einträge","noWatch":"Keine Uhr eingerichtet","showTitle":"Titel anzeigen","sections":"Sichtbare Bereiche","order":"Schaltflächenreihenfolge","limit":"Einträge (1–500)","height":"Höhe (px)","display":"Verlauf anzeigen","table":"Tabelle","graph":"Diagramm","showDelete":"Löschtasten anzeigen","language":"Sprache","haLanguage":"Home Assistant-Sprache","autoWatch":"Uhr automatisch","cardTitle":"Kartentitel","noNumeric":"Keine Zahlenwerte","noStages":"Keine Schlafphasen","invalidStages":"Ungültiger Verlauf","other":"Andere / Ende","refresh":"Aktualisieren","confirmDelete":"Eintrag aus Home Assistant löschen? Auf der Uhr bleibt er erhalten.","deleteError":"Löschen fehlgeschlagen","watch":"Uhr"},"lb":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schrëtt","sleep":"Schlof","date":"Datum","wakeDate":"Erwächen","duration":"Dauer","deep":"Déif","light":"Liicht","score":"Bewäertung","delete":"Läschen","loading":"Lueden…","empty":"Keng Donnéeën","noWatch":"Keng Auer ageriicht","showTitle":"Titel weisen","sections":"Siichtbar Beräicher","order":"Reiefolleg","limit":"Entréeën (1–500)","height":"Héicht (px)","display":"Geschicht uweisen","table":"Tabell","graph":"Grafik","showDelete":"Läschknäppercher weisen","language":"Sprooch","haLanguage":"Home Assistant-Sprooch","autoWatch":"Automatesch Auer","cardTitle":"Kaartentitel","noNumeric":"Keng numeresch Donnéeën","noStages":"Keng Schlofphasen","invalidStages":"Ongëlteg Zäitlinn","other":"Aner / Enn","refresh":"Aktualiséieren","confirmDelete":"Entrée aus Home Assistant läschen? Op der Auer bleift se.","deleteError":"Läschen net méiglech","watch":"Auer"},"it":{"heart":"Battito","oxygen":"Ossigeno","steps":"Passi","sleep":"Sonno","date":"Data","wakeDate":"Risveglio","duration":"Durata","deep":"Profondo","light":"Leggero","score":"Punteggio","delete":"Elimina","loading":"Caricamento…","empty":"Nessun dato","noWatch":"Nessun orologio configurato","showTitle":"Mostra titolo","sections":"Sezioni visibili","order":"Ordine pulsanti","limit":"Record (1–500)","height":"Altezza (px)","display":"Visualizzazione","table":"Tabella","graph":"Grafico","showDelete":"Mostra pulsanti elimina","language":"Lingua","haLanguage":"Lingua Home Assistant","autoWatch":"Orologio automatico","cardTitle":"Titolo scheda","noNumeric":"Nessun dato numerico","noStages":"Fasi del sonno assenti","invalidStages":"Sequenza non valida","other":"Altro / fine","refresh":"Aggiorna","confirmDelete":"Eliminare da Home Assistant? Resterà sull'orologio.","deleteError":"Eliminazione non riuscita","watch":"Orologio"},"pt":{"heart":"Pulso","oxygen":"Oxigénio","steps":"Passos","sleep":"Sono","date":"Data","wakeDate":"Despertar","duration":"Duração","deep":"Profundo","light":"Leve","score":"Pontuação","delete":"Eliminar","loading":"A carregar…","empty":"Sem registos","noWatch":"Sem relógio configurado","showTitle":"Mostrar título","sections":"Secções visíveis","order":"Ordem dos botões","limit":"Registos (1–500)","height":"Altura (px)","display":"Visualização","table":"Tabela","graph":"Gráfico","showDelete":"Mostrar botões de eliminação","language":"Idioma","haLanguage":"Idioma do Home Assistant","autoWatch":"Relógio automático","cardTitle":"Título do cartão","noNumeric":"Sem dados numéricos","noStages":"Sem fases de sono","invalidStages":"Cronologia inválida","other":"Outro / fim","refresh":"Atualizar","confirmDelete":"Eliminar do Home Assistant? Permanecerá no relógio.","deleteError":"Erro ao eliminar","watch":"Relógio"},"es":{"heart":"Pulso","oxygen":"Oxígeno","steps":"Pasos","sleep":"Sueño","date":"Fecha","wakeDate":"Despertar","duration":"Duración","deep":"Profundo","light":"Ligero","score":"Puntuación","delete":"Eliminar","loading":"Cargando…","empty":"Sin registros","noWatch":"Sin relojes configurados","showTitle":"Mostrar título","sections":"Secciones visibles","order":"Orden de botones","limit":"Registros (1–500)","height":"Altura (px)","display":"Visualización","table":"Tabla","graph":"Gráfico","showDelete":"Mostrar botones de eliminación","language":"Idioma","haLanguage":"Idioma de Home Assistant","autoWatch":"Reloj automático","cardTitle":"Título de tarjeta","noNumeric":"Sin datos numéricos","noStages":"Sin fases de sueño","invalidStages":"Cronología no válida","other":"Otro / fin","refresh":"Actualizar","confirmDelete":"¿Eliminar de Home Assistant? Permanecerá en el reloj.","deleteError":"Error al eliminar","watch":"Reloj"}};
+for(const [lang,translations] of Object.entries(ROGBID_TRANSLATIONS)) {
+  Object.assign(translations, {buttonLabels:({ru:"Подписи кнопок",fr:"Libellés des boutons",de:"Tastenbeschriftungen"}[lang]||"Button labels"),todayTotals:({ru:"Показывать сегодня",fr:"Afficher aujourd’hui",de:"Heute anzeigen"}[lang]||"Show today"),details:({ru:"Подробности",fr:"Détails",de:"Details"}[lang]||"Details")});
+}
 const rogbidLang = (config,hass) => {
   const raw = config?.language && config.language !== "auto" ? config.language :
     (hass?.locale?.language || hass?.language || "en");
@@ -78,7 +82,7 @@ class RogbidHistoryCard extends HTMLElement {
     this._kind = visibleKinds(config).includes(this._kind) ? this._kind : visibleKinds(config)[0] || null;
     const changed = previousKind !== this._kind || previousDevice !== this._deviceId;
     const needsTotals = TOTAL_KINDS.includes(this._kind) &&
-      (showTotals(config,this._kind) || showMonthly(config,this._kind));
+      (showTotals(config,this._kind) || showToday(config,this._kind) || showMonthly(config,this._kind));
     if (changed) {
       this._requestId = (this._requestId || 0) + 1;
       this._rows = [];
@@ -142,7 +146,7 @@ class RogbidHistoryCard extends HTMLElement {
         limit: Math.max(1,Math.min(500,Number(this._config.history_limit)||200))
       });
       if (request === this._requestId) this._rows = result.records || [];
-      if (TOTAL_KINDS.includes(kind) && (showTotals(this._config,kind) || showMonthly(this._config,kind))) {
+      if (TOTAL_KINDS.includes(kind) && (showTotals(this._config,kind) || showToday(this._config,kind) || showMonthly(this._config,kind))) {
         // Fetch independently of the chart/table row limit so a year can be summed.
         const totalsResult = await this._hass.callWS({
           type:"rogbid_bridge/history", device_id:this._deviceId, kind:"steps", limit:500
@@ -181,28 +185,32 @@ class RogbidHistoryCard extends HTMLElement {
           .scroll { overflow:auto; }
           svg.history-chart { width:100%; height:auto; color:var(--primary-text-color); }
           .hint { color:var(--secondary-text-color); padding:12px 0; }
-          .totals { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 12px; }
+          .totals { display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;margin:0 0 12px; }
           .total { padding:8px 5px;border:1px solid var(--divider-color);border-radius:8px;text-align:center;min-width:0; }
           .total strong { display:block;font-size:17px;overflow-wrap:anywhere; }
           .total small { color:var(--secondary-text-color);font-size:11px; }
           .sleep-row { cursor:pointer; }
           .sleep-row:focus { outline:2px solid var(--primary-color); }
-          .sleep-detail { padding:12px 4px; }
+          .sleep-detail { padding:12px 4px; border-bottom:1px solid var(--divider-color); margin-bottom:12px; }
+          .sleep-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0; }
+          .sleep-summary > div { padding:8px 4px;text-align:center;border:1px solid var(--divider-color);border-radius:8px; }
+          .sleep-summary strong { display:block; }
+          .eye-button { padding:5px 9px; }
+          .stage-track { align-items:stretch; }
           .stage-track { display:flex; height:32px; border-radius:6px; overflow:hidden; margin:12px 0 6px; background:var(--divider-color); }
           .stage-segment { min-width:1px; }
           .stage-labels { display:flex; justify-content:space-between; font-size:12px; color:var(--secondary-text-color); }
           .legend { font-size:12px; margin:8px 0; }
         </style>
-        <ha-card><header><h2></h2><button id="refresh" aria-label="Refresh history">↻</button></header>
+        <ha-card><header><h2></h2></header>
           <nav></nav><div class="scroll"></div></ha-card>`;
-      this._root.getElementById("refresh").addEventListener("click", () => this._load());
+
     }
     const t = key => rogbidT(this._config,this._hass,key);
     const heading = this._root.querySelector("h2");
     heading.textContent = this._config.title || "Rogbid Bridge";
     heading.hidden = this._config.show_title === false;
-    this._root.getElementById("refresh").title = t("refresh");
-    this._root.getElementById("refresh").setAttribute("aria-label",t("refresh"));
+
     const header = this._root.querySelector("header");
     const oldSelect = header.querySelector("select");
     if (oldSelect) oldSelect.remove();
@@ -217,14 +225,16 @@ class RogbidHistoryCard extends HTMLElement {
       }
       select.value = this._deviceId;
       select.addEventListener("change", () => { this._deviceId = select.value; this._load(); });
-      header.insertBefore(select, this._root.getElementById("refresh"));
+      header.append(select);
     }
     const nav = this._root.querySelector("nav");
     nav.replaceChildren();
     for (const key of visibleKinds(this._config)) {
       const label = KINDS.find(([id])=>id===key)[1].split(" ")[0] + " " + (EXTRA_KINDS.includes(key) ? key : t(key));
       const button = document.createElement("button");
-      button.textContent = label;
+      button.textContent = this._config.show_button_labels === false ? label.split(" ")[0] : label;
+      button.title = label;
+      button.setAttribute("aria-label", label);
       button.setAttribute("aria-pressed", String(this._kind === key));
       button.addEventListener("click", () => {
         if (this._kind !== key) {
@@ -235,6 +245,9 @@ class RogbidHistoryCard extends HTMLElement {
       });
       nav.append(button);
     }
+    const refresh=document.createElement("button");
+    refresh.textContent="↻";refresh.title=t("refresh");refresh.setAttribute("aria-label",t("refresh"));
+    refresh.addEventListener("click",()=>this._load());nav.append(refresh);
     const area = this._root.querySelector(".scroll");
     area.replaceChildren();
     area.style.maxHeight = Math.max(120,Math.min(1200,Number(this._config.history_height)||420))+"px";
@@ -246,13 +259,15 @@ class RogbidHistoryCard extends HTMLElement {
       area.append(note);
       return;
     }
+    if (this._kind === "sleep") { this._renderSleepHistory(area); return; }
     if (viewForKind(this._config,this._kind) === "graph") {
-      if (TOTAL_KINDS.includes(this._kind) && showTotals(this._config,this._kind)) this._renderTotals(area);
+      if (TOTAL_KINDS.includes(this._kind) && (showTotals(this._config,this._kind) || showToday(this._config,this._kind))) this._renderTotals(area);
       if (showMonthly(this._config,this._kind) && monthlyOptions(this._config,this._kind).position !== "after") this._renderMonthly(area);
       this._renderGraph(area);
       if (showMonthly(this._config,this._kind) && monthlyOptions(this._config,this._kind).position === "after") this._renderMonthly(area);
       return;
     }
+    if (TOTAL_KINDS.includes(this._kind) && (showTotals(this._config,this._kind) || showToday(this._config,this._kind))) this._renderTotals(area);
     const table = document.createElement("table");
     const headings = this._kind === "heart" ? [t("date"), "BPM"] :
       this._kind === "oxygen" ? [t("date"), "SpO₂"] :
@@ -334,17 +349,16 @@ class RogbidHistoryCard extends HTMLElement {
 
   _renderTotals(area) {
     const lang = rogbidLang(this._config,this._hass);
-    const labels = lang === "ru" ? ["7 дней","30 дней","365 дней"] :
-      lang === "fr" ? ["7 jours","30 jours","365 jours"] :
-      lang === "de" ? ["7 Tage","30 Tage","365 Tage"] :
-      ["7 days","30 days","365 days"];
+    const labels = lang === "ru" ? ["Сегодня","7 дней","30 дней","365 дней"] :
+      lang === "fr" ? ["Aujourd'hui","7 jours","30 jours","365 jours"] :
+      lang === "de" ? ["Heute","7 Tage","30 Tage","365 Tage"] :
+      ["Today","7 days","30 days","365 days"];
     const today = new Date();
     today.setHours(0,0,0,0);
-    const days = [7,30,365];
-    const sums = [0,0,0], counts = [0,0,0];
-    // A date is one daily total, not a sequence of incremental samples.
+    const days = [1,7,30,365];
+    const sums = [0,0,0,0], counts = [0,0,0,0];
     const seen = new Set();
-    for (const record of this._totalRows || []) {
+    for (const record of this._totalRows || this._rows || []) {
       const date = dailyDate(record.date);
       if (!date || seen.has(record.date)) continue;
       seen.add(record.date);
@@ -358,11 +372,12 @@ class RogbidHistoryCard extends HTMLElement {
     const container=document.createElement("div");container.className="totals";
     const formatter=new Intl.NumberFormat(lang,{maximumFractionDigits:this._kind==="km"?1:0});
     days.forEach((period,i)=>{
+      if (i === 0 ? !showToday(this._config,this._kind) : !showTotals(this._config,this._kind)) return;
       const item=document.createElement("div");item.className="total";
       const value=document.createElement("strong");
       value.textContent=counts[i] ? formatter.format(this._kind==="km"?sums[i]:Math.round(sums[i])) : "—";
       const label=document.createElement("small");
-      label.textContent=labels[i]+" · "+(this._kind==="steps"?(lang==="ru"?"шагов":"steps"):this._kind);
+      label.textContent=labels[i];
       item.append(value,label);container.append(item);
     });
     area.append(container);
@@ -462,6 +477,38 @@ class RogbidHistoryCard extends HTMLElement {
     area.append(svg);
   }
 
+  _renderSleepHistory(area) {
+    const t=key=>rogbidT(this._config,this._hass,key);
+    const rows=this._rows;
+    if (!rows.length) return;
+    const selected=rows.find(r=>String(r._record_id||r.id||r.sleep_date)===this._selectedSleepId) || rows[0];
+    this._selectedSleepId=String(selected._record_id||selected.id||selected.sleep_date);
+    this._showSleep(selected,area);
+    const table=document.createElement("table");
+    const head=document.createElement("tr");
+    for (const title of [t("wakeDate"),t("duration"),""]) {
+      const th=document.createElement("th");th.textContent=title;head.append(th);
+    }
+    const thead=document.createElement("thead");thead.append(head);table.append(thead);
+    const body=document.createElement("tbody");
+    for(const record of rows) {
+      const row=document.createElement("tr");
+      for(const value of [record.sleep_date||"—",formatRogbidMinutes(record.duration_minutes,rogbidLang(this._config,this._hass))]) {
+        const td=document.createElement("td");td.textContent=value;row.append(td);
+      }
+      const cell=document.createElement("td");
+      const eye=document.createElement("button");eye.className="eye-button";eye.textContent="👁";
+      eye.title=t("details") === "details" ? "Details" : t("details");
+      eye.setAttribute("aria-label",eye.title);
+      eye.addEventListener("click",()=>{
+        this._selectedSleepId=String(record._record_id||record.id||record.sleep_date);
+        this._render();
+      });
+      cell.append(eye);row.append(cell);body.append(row);
+    }
+    table.append(body);area.append(table);
+  }
+
   _showSleep(record, area) {
     const detail = document.createElement("div");
     detail.className = "sleep-detail";
@@ -469,6 +516,13 @@ class RogbidHistoryCard extends HTMLElement {
     title.textContent = (record.sleep_date || "") + "  " +
       (record.start_time || "") + "–" + (record.end_time || "");
     detail.append(title);
+    const summary=document.createElement("div");summary.className="sleep-summary";
+    for(const [name,value] of [[rogbidT(this._config,this._hass,"deep"),record.deep_minutes],[rogbidT(this._config,this._hass,"light"),record.light_minutes],["REM",record.fast_minutes]]) {
+      const cell=document.createElement("div");const label=document.createElement("small");label.textContent=name;
+      const amount=document.createElement("strong");amount.textContent=formatRogbidMinutes(value,rogbidLang(this._config,this._hass));
+      cell.append(label,amount);summary.append(cell);
+    }
+    detail.append(summary);
     let stages;
     try {
       stages = typeof record.stages_json === "string" ?
@@ -604,6 +658,10 @@ class RogbidHistoryCardEditor extends HTMLElement {
     language.value=this._config.language||"auto";
     language.addEventListener("change",()=>this._update("language",language.value==="auto"?null:language.value));
     add(t("language"),language);
+    const buttonLabels=document.createElement("input");buttonLabels.type="checkbox";buttonLabels.checked=this._config.show_button_labels!==false;
+    buttonLabels.addEventListener("change",()=>this._update("show_button_labels",buttonLabels.checked));
+    const buttonLabelsRow=document.createElement("label");buttonLabelsRow.style.cssText="display:flex;gap:8px;align-items:center;margin-top:12px";
+    buttonLabelsRow.append(buttonLabels,document.createTextNode(t("buttonLabels")));this.append(buttonLabelsRow);
     const titleToggle=document.createElement("input");titleToggle.type="checkbox";
     titleToggle.checked=this._config.show_title!==false;
     titleToggle.addEventListener("change",()=>this._update("show_title",titleToggle.checked));
@@ -660,6 +718,13 @@ class RogbidHistoryCardEditor extends HTMLElement {
       label.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0";
       label.append(toggle,document.createTextNode("∑ "+(kind==="steps"?t("steps"):kind)+" (7 / 30 / 365)"));
       this.append(label);
+    }
+    const todayTitle=document.createElement("div");todayTitle.textContent=t("todayTotals");todayTitle.style.marginTop="12px";this.append(todayTitle);
+    for(const kind of TOTAL_KINDS) {
+      const toggle=document.createElement("input");toggle.type="checkbox";toggle.checked=showToday(this._config,kind);
+      toggle.addEventListener("change",()=>this._update("show_today",{...(this._config.show_today||{}),[kind]:toggle.checked}));
+      const row=document.createElement("label");row.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0";
+      row.append(toggle,document.createTextNode(kind==="steps"?t("steps"):kind));this.append(row);
     }
     const monthlyTitle=document.createElement("div");
     monthlyTitle.textContent=(rogbidLang(this._config,this._hass)==="ru"?"Месячные графики":"Monthly charts");
