@@ -1,5 +1,6 @@
 """UI configuration for Rogbid Bridge: discover watches from MQTT."""
 import asyncio
+import hashlib
 import re
 
 import voluptuous as vol
@@ -60,8 +61,24 @@ class RogbidBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not choices:
             return self.async_abort(reason="no_ble_candidates")
         if user_input is not None:
-            # Runtime setup is not wired yet: never create a broken entry.
-            return self.async_abort(reason="ble_setup_not_ready")
+            selection = user_input.get("candidate")
+            if selection not in choices:
+                return self.async_abort(reason="no_ble_candidates")
+            driver_id, address = selection.split("|", 1)
+            device_id = "ble_" + hashlib.sha256(address.upper().encode()).hexdigest()[:24]
+            await self.async_set_unique_id(device_id)
+            self._abort_if_unique_id_configured()
+            candidate = next(c for c in candidates if c.address == address and c.driver_id == driver_id)
+            return self.async_create_entry(
+                title=candidate.name or f"BLE {address}",
+                data={
+                    CONF_DEVICE_ID: device_id,
+                    "transport": "ble",
+                    "ble_address": address,
+                    "ble_driver": driver_id,
+                    "ble_name": candidate.name or f"BLE {address}",
+                },
+            )
         return self.async_show_form(
             step_id="bluetooth_watch",
             data_schema=vol.Schema({vol.Required("candidate"): vol.In(choices)}),
@@ -92,5 +109,5 @@ class RogbidBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         else:
             schema = vol.Schema({vol.Required(CONF_DEVICE_ID): str})
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors
+            step_id="mqtt_watch", data_schema=schema, errors=errors
         )
