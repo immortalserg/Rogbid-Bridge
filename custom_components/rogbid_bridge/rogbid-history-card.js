@@ -526,7 +526,7 @@ class RogbidHistoryCard extends HTMLElement {
       " · " + formatRogbidMinutes(record.duration_minutes,rogbidLang(this._config,this._hass));
     detail.append(title);
     const summary=document.createElement("div");summary.className="sleep-summary";
-    for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.awake_minutes ?? null]]) {
+    for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.fast_minutes ?? null]]) {
       const cell=document.createElement("div");const label=document.createElement("small");label.textContent=name;
       const amount=document.createElement("strong");amount.textContent=formatRogbidMinutes(value,rogbidLang(this._config,this._hass));
       const color=sleepColor(this._config,kind);
