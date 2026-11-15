@@ -2,10 +2,24 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect Rogbid Bridge",
-        "description": "Select a detected watch from MQTT. If no watches are found, enter the complete Watch (MQTT device ID) manually.",
+        "title": "Connect Watch Bridge",
+        "menu_options": {
+          "mqtt_watch": "Rogbid Z10 (MQTT)",
+          "bluetooth_watch": "Bluetooth heart-rate device (experimental)"
+        }
+      },
+      "mqtt_watch": {
+        "title": "Connect Rogbid via MQTT",
+        "description": "Select a detected watch from MQTT, or enter its MQTT device ID.",
         "data": {
           "device_id": "MQTT device ID"
+        }
+      },
+      "bluetooth_watch": {
+        "title": "Bluetooth candidates (preview)",
+        "description": "Select a detected heart-rate device to inspect. BLE configuration and background connection are not enabled yet.",
+        "data": {
+          "candidate": "Discovered BLE device"
         }
       }
     },
@@ -13,7 +27,9 @@
       "invalid_device_id": "Use letters, numbers, underscores or hyphens only."
     },
     "abort": {
-      "already_configured": "This watch is already configured."
+      "already_configured": "This watch is already configured.",
+      "no_ble_candidates": "No connectable devices advertising the standard Heart Rate Service were found.",
+      "ble_setup_not_ready": "BLE setup is still experimental. No device was added; existing Rogbid devices are unaffected."
     }
   }
 }
