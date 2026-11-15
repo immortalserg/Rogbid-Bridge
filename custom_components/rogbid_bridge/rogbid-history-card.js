@@ -580,6 +580,38 @@ class RogbidHistoryCard extends HTMLElement {
       track.append(segment);
     }
     detail.append(track);
+    // The vendor exposes fast_minutes only as an aggregate; stage type 3 marks
+    // the end of a sleep session, not a timestamped awakening. Show the
+    // aggregate separately rather than inventing positions on the timeline.
+    const awakeMinutes = Number(record.fast_minutes);
+    const totalMinutes = Number(record.duration_minutes);
+    if (record.fast_minutes != null && Number.isFinite(awakeMinutes) && awakeMinutes >= 0 && Number.isFinite(totalMinutes) && totalMinutes > 0) {
+      const awakeRow = document.createElement("div");
+      awakeRow.className = "awake-aggregate";
+      awakeRow.style.margin = "8px 0 4px";
+      awakeRow.style.fontSize = "12px";
+      const awakeLabel = document.createElement("div");
+      awakeLabel.style.display = "flex";
+      awakeLabel.style.justifyContent = "space-between";
+      const name = document.createElement("span");
+      name.textContent = rogbidT(this._config,this._hass,"awake");
+      const duration = document.createElement("span");
+      duration.textContent = formatRogbidMinutes(awakeMinutes,rogbidLang(this._config,this._hass));
+      awakeLabel.append(name,duration);
+      const meter = document.createElement("div");
+      meter.style.height = "5px";
+      meter.style.marginTop = "4px";
+      meter.style.borderRadius = "4px";
+      meter.style.overflow = "hidden";
+      meter.style.backgroundColor = "var(--divider-color)";
+      const fill = document.createElement("div");
+      fill.style.height = "100%";
+      fill.style.width = Math.min(100,awakeMinutes/totalMinutes*100)+"%";
+      fill.style.backgroundColor = sleepColor(this._config,"awake");
+      meter.append(fill);
+      awakeRow.append(awakeLabel,meter);
+      detail.append(awakeRow);
+    }
     const labels = document.createElement("div");
     labels.className = "stage-labels";
     for (const label of [timeline[0].label, timeline[timeline.length - 1].label]) {
