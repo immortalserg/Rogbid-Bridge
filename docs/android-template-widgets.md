@@ -17,6 +17,12 @@ These are **Home Assistant Companion App → Android → Template Widget** examp
 
 The widget supports basic tags such as `<center>`, `<font color="...">`, `<big>`, `<small>`, `<b>`, and `<br>`. Do not expect HTML tables, SVG, JavaScript, or CSS to work. In particular, `font-stretch` and `letter-spacing` are **best-effort** and may be ignored by Android's HTML renderer.
 
+## Android launcher preview / Виджеты на рабочем столе Android
+
+![Android Home Assistant Template Widgets: steps, calories, distance and last sleep](../img/vidget.jpeg)
+
+The screenshot shows all four Android widgets together. / На скриншоте показаны все четыре виджета Android.
+
 ## 1. Steps / Шаги
 
 Current steps and rolling 7/30/365-day totals.
@@ -98,6 +104,12 @@ Current distance (km) and rolling totals.
 </center>
 ```
 
+## Home Assistant activity card / Карточка активности Home Assistant
+
+![Home Assistant activity card with steps totals and history charts](../img/0014.png)
+
+This is the **Home Assistant dashboard card**, not an Android launcher widget. / Это карточка интерфейса Home Assistant, а не виджет рабочего стола Android.
+
 ## 4. Last sleep / Последний сон
 
 Duration, start/end times, deep/light/awake metrics and a compact 32-block horizontal stage timeline. The `sleep_json` attribute must be a mapping containing `sleep_date`, `start_time`, `end_time`, and `stages` with `time` and `type`. Stage types from the watch are **1 = deep, 2 = light, 3 = awake/end**. The existing `rem_sleep` entity is used here as the **awake** metric for compatibility with the current integration; it is **not REM sleep**.
@@ -167,6 +179,12 @@ Duration, start/end times, deep/light/awake metrics and a compact 32-block horiz
 {% endif -%}
 </center>
 ```
+
+## Home Assistant sleep card / Карточка сна Home Assistant
+
+![Home Assistant sleep card with sleep stages, durations and history](../img/0013.png)
+
+This screenshot shows the **Home Assistant dashboard sleep card**; its detailed graph is separate from the compact Android widget timeline. / Здесь показана карточка сна Home Assistant с подробным графиком, отличная от компактной шкалы Android-виджета.
 
 ### Compact timeline adjustments / Настройка графика
 
