@@ -122,3 +122,27 @@ class Journal:
                     (device_id, kind, record_id),
                 )
             return result.rowcount == 1
+
+    def step_totals(self, device_id: str, start_date: str, end_date: str) -> dict:
+        """Sum one daily steps record per date over an inclusive local-date window."""
+        totals = {"steps": 0.0, "kcal": 0.0, "diatance": 0.0}
+        with sqlite3.connect(self.path) as db:
+            rows = db.execute(
+                """SELECT measured_at, payload FROM records
+                   WHERE device_id=? AND kind='steps'
+                   AND substr(measured_at, 1, 10) BETWEEN ? AND ?
+                   ORDER BY measured_at DESC, received_at DESC""",
+                (device_id, start_date, end_date),
+            ).fetchall()
+        seen = set()
+        for measured_at, raw in rows:
+            day = measured_at[:10]
+            if day in seen:
+                continue
+            seen.add(day)
+            payload = json.loads(raw)
+            for key in totals:
+                value = payload.get(key)
+                if type(value) in (int, float) and value >= 0:
+                    totals[key] += value
+        return totals
