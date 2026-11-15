@@ -133,7 +133,7 @@ class RogbidTotalSensor(SensorEntity):
         self.async_write_ha_state()
 
 class RogbidLastSleepSensor(SensorEntity):
-    """Latest sleep record; structured JSON is exposed as HA attributes."""
+    """Latest sleep timeline exposed in one structured HA attribute."""
     _attr_has_entity_name = True
     _attr_name = "Last sleep details"
     _attr_icon = "mdi:sleep"
@@ -171,15 +171,11 @@ class RogbidLastSleepSensor(SensorEntity):
                 "sleep_date": record.get("sleep_date", record.get("measured_at", "")[:10]),
                 "start_time": record.get("start_time", record.get("sleep_start")),
                 "end_time": record.get("end_time", record.get("sleep_end")),
-                "duration_minutes": record.get("duration_minutes", record.get("sleep_duration")),
-                "deep_minutes": record.get("deep_minutes", record.get("sleep_deep")),
-                "light_minutes": record.get("light_minutes", record.get("sleep_light")),
-                "rem_minutes": record.get("rem_minutes", record.get("fast_minutes", record.get("sleep_fast"))),
                 "stages": stages,
             }
-            # HA states have a 255-character limit; keep JSON in attributes.
+            # HA states have a 255-character limit; keep the timeline in one attribute.
             self._attr_native_value = details["sleep_date"] or "unknown"
-            self._attr_extra_state_attributes = {"sleep_json": details, **details}
+            self._attr_extra_state_attributes = {"sleep_json": details}
             self._attr_available = True
         except Exception:
             _LOGGER.exception("Failed to read latest Rogbid sleep record")
