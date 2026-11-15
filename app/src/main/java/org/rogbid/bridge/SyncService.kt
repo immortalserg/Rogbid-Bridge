@@ -21,7 +21,6 @@ class SyncService : Service() {
  @Volatile private var running = false
  private var sleepReceiverRegistered = false
  private var sleepBeforeRequest: String? = null
- private var sleepRequestAt = 0L
  private var sleepPollGeneration = 0
  private fun snapshotKey(s: SleepCollector.Snapshot): String =
   listOf(s.start, s.end, s.duration.toString(), s.stages).joinToString("|")
@@ -95,7 +94,6 @@ class SyncService : Service() {
      android.util.Log.w("RogbidSleep", "Cannot read baseline snapshot", e)
      null
     }
-    sleepRequestAt = System.currentTimeMillis()
     val generation = ++sleepPollGeneration
     sendBroadcast(Intent("com.wiite.get.sleep.data"))
     handler.postDelayed({ pollSleep(generation) }, 3000L)
