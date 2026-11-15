@@ -7,6 +7,8 @@ from homeassistant import config_entries
 from homeassistant.components import mqtt
 
 from .const import DOMAIN, CONF_DEVICE_ID
+from .ble_drivers.ha_adapter import discovered_candidates
+from .ble_drivers.registry import registry
 
 WATCH_TOPIC = re.compile(r"^rogbid/(z10_[a-f0-9]{32})/state$")
 DISCOVERY_SECONDS = 3
@@ -41,6 +43,31 @@ class RogbidBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return sorted(found)
 
     async def async_step_user(self, user_input=None):
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["mqtt_watch", "bluetooth_watch"],
+        )
+
+    async def async_step_bluetooth_watch(self, user_input=None):
+        """List possible BLE devices, but do not create unsupported entries."""
+        candidates = discovered_candidates(self.hass, registry)
+        choices = {
+            f"{candidate.driver_id}|{candidate.address}":
+                f"{candidate.name or candidate.address} · {candidate.driver_name}"
+            for candidate in candidates
+            if candidate.connectable
+        }
+        if not choices:
+            return self.async_abort(reason="no_ble_candidates")
+        if user_input is not None:
+            # Runtime setup is not wired yet: never create a broken entry.
+            return self.async_abort(reason="ble_setup_not_ready")
+        return self.async_show_form(
+            step_id="bluetooth_watch",
+            data_schema=vol.Schema({vol.Required("candidate"): vol.In(choices)}),
+        )
+
+    async def async_step_mqtt_watch(self, user_input=None):
         errors = {}
         if user_input is not None:
             device_id = (user_input.get(CONF_DEVICE_ID) or "").strip()
