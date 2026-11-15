@@ -57,6 +57,9 @@ async def _register_lovelace_resource(hass: HomeAssistant) -> None:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if entry.data.get('transport') == 'ble':
+        from .ble_runtime import async_setup_ble_entry
+        return await async_setup_ble_entry(hass, entry)
     device_id = entry.data[CONF_DEVICE_ID]
     journal = Journal(hass.config.path(".storage", "rogbid_bridge", f"{device_id}.sqlite3"))
     await hass.async_add_executor_job(journal.initialize)
