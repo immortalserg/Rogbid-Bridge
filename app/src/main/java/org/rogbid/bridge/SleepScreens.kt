@@ -98,12 +98,6 @@ class SleepScreens(
   }
  }
 
- private fun wakeCount(raw: String): String {
-  // The vendor's known types are deep=1, light=2 and session end=3.
-  // Type 3 is NOT evidence of an awakening; do not invent counts.
-  return "—"
- }
-
  private fun metricRow(root: LinearLayout, title: String, value: String, swatch: Int? = null) {
   val row = LinearLayout(activity).apply {
    orientation = LinearLayout.HORIZONTAL
@@ -132,7 +126,7 @@ class SleepScreens(
   metricRow(root, L10n.text("total"), duration(record.optInt("duration_minutes")))
   metricRow(root, L10n.text("deep"), duration(record.optInt("deep_minutes")), DEEP_COLOR)
   metricRow(root, L10n.text("light"), duration(record.optInt("light_minutes")), LIGHT_COLOR)
-  metricRow(root, L10n.text("awakenings"), "—", AWAKE_COLOR)
+  metricRow(root, L10n.text("awakenings"), duration(record.optInt("fast_minutes")), AWAKE_COLOR)
   val stages = try { JSONArray(record.optString("stages_json")) } catch (_: Exception) { JSONArray() }
   root.addView(SleepGraph(activity, stages, foreground).apply {
    layoutParams = LinearLayout.LayoutParams(-1, dp(90))
