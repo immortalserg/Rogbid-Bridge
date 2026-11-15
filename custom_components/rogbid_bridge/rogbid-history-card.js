@@ -576,6 +576,11 @@ class RogbidHistoryCard extends HTMLElement {
       const segment=document.createElement("div");segment.className="stage-segment";
       segment.style.flex=String(next.time-stage.time);
       segment.style.backgroundColor=color(stage.type);
+      if(stage.type===3) {
+        // Three minutes span only ~2px on a 320px-wide 8-hour chart.
+        segment.style.minWidth="4px";
+        segment.style.boxShadow="inset 1px 0 0 rgba(255,255,255,.65), inset -1px 0 0 rgba(255,255,255,.65)";
+      }
       segment.title=stage.label+"–"+next.label;
       track.append(segment);
     }
