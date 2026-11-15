@@ -6,6 +6,8 @@ const viewForKind = (config,kind) => config?.view_modes?.[kind] || config?.view_
 const TOTAL_KINDS = ["steps","kcal","km"];
 const showTotals = (config,kind) => config?.show_totals?.[kind] === true;
 const showToday = (config,kind) => config?.show_today?.[kind] !== false;
+const SLEEP_COLORS={deep:"#2d5fd2",light:"#32beba",awake:"#ef9c51"};
+const sleepColor=(config,kind)=>/^#[0-9a-fA-F]{6}$/.test(config?.sleep_colors?.[kind]||"")?config.sleep_colors[kind]:SLEEP_COLORS[kind];
 const monthlyOptions = (config,kind) => config?.monthly_charts?.[kind] || {};
 const showMonthly = (config,kind) => TOTAL_KINDS.includes(kind) && monthlyOptions(config,kind).enabled === true;
 const dailyDate = raw => {
@@ -29,7 +31,7 @@ const orderKinds = v => {
 
 const ROGBID_TRANSLATIONS = {"en":{"heart":"Pulse","oxygen":"Oxygen","steps":"Steps","sleep":"Sleep","date":"Date","wakeDate":"Wake date","duration":"Duration","deep":"Deep","light":"Light","score":"Score","delete":"Delete","loading":"Loading…","empty":"No records yet","noWatch":"No watches configured","showTitle":"Show title","sections":"Visible sections","order":"Button order","limit":"History records (1–500)","height":"History height (px)","display":"History display","table":"Table","graph":"Graph","showDelete":"Show delete buttons","language":"Language","haLanguage":"Home Assistant language","autoWatch":"Automatic watch","cardTitle":"Card title","noNumeric":"No numeric data","noStages":"No sleep stages available","invalidStages":"No valid stage timeline","other":"Other / end","refresh":"Refresh history","confirmDelete":"Delete record from Home Assistant? It will remain on the watch.","deleteError":"Could not delete record","watch":"Watch"},"ru":{"heart":"Пульс","oxygen":"Кислород","steps":"Шаги","sleep":"Сон","date":"Дата","wakeDate":"Дата пробуждения","duration":"Продолжительность","deep":"Глубокий","light":"Лёгкий","score":"Оценка","delete":"Удалить","loading":"Загрузка…","empty":"Записей пока нет","noWatch":"Часы не настроены","showTitle":"Показывать заголовок","sections":"Отображаемые разделы","order":"Порядок кнопок","limit":"Количество записей (1–500)","height":"Высота истории (пикс.)","display":"Отображение истории","table":"Таблица","graph":"График","showDelete":"Показывать кнопки удаления","language":"Язык","haLanguage":"Язык Home Assistant","autoWatch":"Автоматический выбор часов","cardTitle":"Заголовок карточки","noNumeric":"Нет числовых данных","noStages":"Нет данных о фазах сна","invalidStages":"Некорректная шкала фаз сна","other":"Другое / конец","refresh":"Обновить историю","confirmDelete":"Удалить запись из Home Assistant? На часах она останется.","deleteError":"Не удалось удалить запись","watch":"Часы"},"fr":{"heart":"Pouls","oxygen":"Oxygène","steps":"Pas","sleep":"Sommeil","date":"Date","wakeDate":"Date de réveil","duration":"Durée","deep":"Profond","light":"Léger","score":"Score","delete":"Supprimer","loading":"Chargement…","empty":"Aucune donnée","noWatch":"Aucune montre configurée","showTitle":"Afficher le titre","sections":"Sections visibles","order":"Ordre des boutons","limit":"Enregistrements (1–500)","height":"Hauteur (px)","display":"Affichage de l'historique","table":"Tableau","graph":"Graphique","showDelete":"Afficher les boutons de suppression","language":"Langue","haLanguage":"Langue de Home Assistant","autoWatch":"Montre automatique","cardTitle":"Titre de la carte","noNumeric":"Aucune donnée numérique","noStages":"Aucune phase de sommeil","invalidStages":"Chronologie invalide","other":"Autre / fin","refresh":"Actualiser","confirmDelete":"Supprimer de Home Assistant ? La montre conserve cette donnée.","deleteError":"Suppression impossible","watch":"Montre"},"de":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schritte","sleep":"Schlaf","date":"Datum","wakeDate":"Aufwachdatum","duration":"Dauer","deep":"Tief","light":"Leicht","score":"Bewertung","delete":"Löschen","loading":"Laden…","empty":"Keine Einträge","noWatch":"Keine Uhr eingerichtet","showTitle":"Titel anzeigen","sections":"Sichtbare Bereiche","order":"Schaltflächenreihenfolge","limit":"Einträge (1–500)","height":"Höhe (px)","display":"Verlauf anzeigen","table":"Tabelle","graph":"Diagramm","showDelete":"Löschtasten anzeigen","language":"Sprache","haLanguage":"Home Assistant-Sprache","autoWatch":"Uhr automatisch","cardTitle":"Kartentitel","noNumeric":"Keine Zahlenwerte","noStages":"Keine Schlafphasen","invalidStages":"Ungültiger Verlauf","other":"Andere / Ende","refresh":"Aktualisieren","confirmDelete":"Eintrag aus Home Assistant löschen? Auf der Uhr bleibt er erhalten.","deleteError":"Löschen fehlgeschlagen","watch":"Uhr"},"lb":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schrëtt","sleep":"Schlof","date":"Datum","wakeDate":"Erwächen","duration":"Dauer","deep":"Déif","light":"Liicht","score":"Bewäertung","delete":"Läschen","loading":"Lueden…","empty":"Keng Donnéeën","noWatch":"Keng Auer ageriicht","showTitle":"Titel weisen","sections":"Siichtbar Beräicher","order":"Reiefolleg","limit":"Entréeën (1–500)","height":"Héicht (px)","display":"Geschicht uweisen","table":"Tabell","graph":"Grafik","showDelete":"Läschknäppercher weisen","language":"Sprooch","haLanguage":"Home Assistant-Sprooch","autoWatch":"Automatesch Auer","cardTitle":"Kaartentitel","noNumeric":"Keng numeresch Donnéeën","noStages":"Keng Schlofphasen","invalidStages":"Ongëlteg Zäitlinn","other":"Aner / Enn","refresh":"Aktualiséieren","confirmDelete":"Entrée aus Home Assistant läschen? Op der Auer bleift se.","deleteError":"Läschen net méiglech","watch":"Auer"},"it":{"heart":"Battito","oxygen":"Ossigeno","steps":"Passi","sleep":"Sonno","date":"Data","wakeDate":"Risveglio","duration":"Durata","deep":"Profondo","light":"Leggero","score":"Punteggio","delete":"Elimina","loading":"Caricamento…","empty":"Nessun dato","noWatch":"Nessun orologio configurato","showTitle":"Mostra titolo","sections":"Sezioni visibili","order":"Ordine pulsanti","limit":"Record (1–500)","height":"Altezza (px)","display":"Visualizzazione","table":"Tabella","graph":"Grafico","showDelete":"Mostra pulsanti elimina","language":"Lingua","haLanguage":"Lingua Home Assistant","autoWatch":"Orologio automatico","cardTitle":"Titolo scheda","noNumeric":"Nessun dato numerico","noStages":"Fasi del sonno assenti","invalidStages":"Sequenza non valida","other":"Altro / fine","refresh":"Aggiorna","confirmDelete":"Eliminare da Home Assistant? Resterà sull'orologio.","deleteError":"Eliminazione non riuscita","watch":"Orologio"},"pt":{"heart":"Pulso","oxygen":"Oxigénio","steps":"Passos","sleep":"Sono","date":"Data","wakeDate":"Despertar","duration":"Duração","deep":"Profundo","light":"Leve","score":"Pontuação","delete":"Eliminar","loading":"A carregar…","empty":"Sem registos","noWatch":"Sem relógio configurado","showTitle":"Mostrar título","sections":"Secções visíveis","order":"Ordem dos botões","limit":"Registos (1–500)","height":"Altura (px)","display":"Visualização","table":"Tabela","graph":"Gráfico","showDelete":"Mostrar botões de eliminação","language":"Idioma","haLanguage":"Idioma do Home Assistant","autoWatch":"Relógio automático","cardTitle":"Título do cartão","noNumeric":"Sem dados numéricos","noStages":"Sem fases de sono","invalidStages":"Cronologia inválida","other":"Outro / fim","refresh":"Atualizar","confirmDelete":"Eliminar do Home Assistant? Permanecerá no relógio.","deleteError":"Erro ao eliminar","watch":"Relógio"},"es":{"heart":"Pulso","oxygen":"Oxígeno","steps":"Pasos","sleep":"Sueño","date":"Fecha","wakeDate":"Despertar","duration":"Duración","deep":"Profundo","light":"Ligero","score":"Puntuación","delete":"Eliminar","loading":"Cargando…","empty":"Sin registros","noWatch":"Sin relojes configurados","showTitle":"Mostrar título","sections":"Secciones visibles","order":"Orden de botones","limit":"Registros (1–500)","height":"Altura (px)","display":"Visualización","table":"Tabla","graph":"Gráfico","showDelete":"Mostrar botones de eliminación","language":"Idioma","haLanguage":"Idioma de Home Assistant","autoWatch":"Reloj automático","cardTitle":"Título de tarjeta","noNumeric":"Sin datos numéricos","noStages":"Sin fases de sueño","invalidStages":"Cronología no válida","other":"Otro / fin","refresh":"Actualizar","confirmDelete":"¿Eliminar de Home Assistant? Permanecerá en el reloj.","deleteError":"Error al eliminar","watch":"Reloj"}};
 for(const [lang,translations] of Object.entries(ROGBID_TRANSLATIONS)) {
-  Object.assign(translations, {buttonLabels:({ru:"Подписи кнопок",fr:"Libellés des boutons",de:"Tastenbeschriftungen"}[lang]||"Button labels"),todayTotals:({ru:"Показывать сегодня",fr:"Afficher aujourd’hui",de:"Heute anzeigen"}[lang]||"Show today"),details:({ru:"Подробности",fr:"Détails",de:"Details"}[lang]||"Details"),awake:({ru:"Пробуждение",fr:"Éveil",de:"Wach"}[lang]||"Awake"),sleepStages:({ru:"Фазы сна",fr:"Phases de sommeil",de:"Schlafphasen"}[lang]||"Sleep stages")});
+  Object.assign(translations, {buttonLabels:({ru:"Подписи кнопок",fr:"Libellés des boutons",de:"Tastenbeschriftungen"}[lang]||"Button labels"),todayTotals:({ru:"Показывать сегодня",fr:"Afficher aujourd’hui",de:"Heute anzeigen"}[lang]||"Show today"),details:({ru:"Подробности",fr:"Détails",de:"Details"}[lang]||"Details"),awake:({ru:"Пробуждение",fr:"Éveil",de:"Wach"}[lang]||"Awake"),sleepStages:({ru:"Фазы сна",fr:"Phases de sommeil",de:"Schlafphasen"}[lang]||"Sleep stages"),sleepColors:({ru:"Цвета фаз сна",fr:"Couleurs des phases de sommeil",de:"Schlafphasenfarben"}[lang]||"Sleep stage colors"),sleepSquare:({ru:"Цветной квадратик",fr:"Carré coloré",de:"Farbiges Quadrat"}[lang]||"Color square"),sleepColoredText:({ru:"Цветное значение",fr:"Valeur colorée",de:"Farbiger Wert"}[lang]||"Colored value"),sleepSummaryStyle:({ru:"Обозначение фаз сна",fr:"Indicateurs des phases",de:"Schlafphasenanzeige"}[lang]||"Sleep phase indicators")});
 }
 const rogbidLang = (config,hass) => {
   const raw = config?.language && config.language !== "auto" ? config.language :
@@ -199,6 +201,8 @@ class RogbidHistoryCard extends HTMLElement {
           .sleep-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0; }
           .sleep-summary > div { padding:8px 4px;text-align:center;border:1px solid var(--divider-color);border-radius:8px; }
           .sleep-summary strong { display:block; }
+          .sleep-summary small { display:block;margin-bottom:5px; }
+          .sleep-color-square { display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle; }
           .eye-button { padding:5px 9px; }
           .stage-track { align-items:stretch; }
           .stage-track { display:flex; height:32px; border-radius:6px; overflow:hidden; margin:12px 0 6px; background:var(--divider-color); }
@@ -521,9 +525,12 @@ class RogbidHistoryCard extends HTMLElement {
       (record.start_time || "") + "–" + (record.end_time || "");
     detail.append(title);
     const summary=document.createElement("div");summary.className="sleep-summary";
-    for(const [name,value] of [[rogbidT(this._config,this._hass,"deep"),record.deep_minutes],[rogbidT(this._config,this._hass,"light"),record.light_minutes],["REM",record.fast_minutes]]) {
+    for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.awake_minutes]]) {
       const cell=document.createElement("div");const label=document.createElement("small");label.textContent=name;
       const amount=document.createElement("strong");amount.textContent=formatRogbidMinutes(value,rogbidLang(this._config,this._hass));
+      const color=sleepColor(this._config,kind);
+      if(this._config.sleep_summary_style==="text") amount.style.color=color;
+      else { const square=document.createElement("span");square.className="sleep-color-square";square.style.backgroundColor=color;label.prepend(square); }
       cell.append(label,amount);summary.append(cell);
     }
     detail.append(summary);
@@ -554,58 +561,24 @@ class RogbidHistoryCard extends HTMLElement {
       previous = time;
       timeline.push({ time: time + offset, type: Number(stage.type), label: stage.time });
     }
-    const track = document.createElement("div");
-    track.className = "stage-track";
-    const start = timeline[0]?.time;
-    const end = timeline[timeline.length - 1]?.time;
-    if (timeline.length < 2 || end <= start) {
-      detail.append(document.createTextNode(rogbidT(this._config,this._hass,"invalidStages")));
-      area.prepend(detail);
-      return;
+    const start=timeline[0]?.time,end=timeline[timeline.length-1]?.time;
+    if(timeline.length<2||end<=start){
+      const hint=document.createElement("div");hint.className="hint";
+      hint.textContent=rogbidT(this._config,this._hass,"invalidStages");detail.append(hint);
+      const old=area.querySelector(".sleep-detail");if(old)old.remove();area.prepend(detail);return;
     }
-    for (let i = 0; i < timeline.length - 1; i++) {
-      const stage = timeline[i], next = timeline[i + 1];
-      if (next.time <= stage.time) continue;
-      const segment = document.createElement("div");
-      segment.className = "stage-segment";
-      segment.style.flex = String(next.time - stage.time);
-      segment.style.background = stage.type === 1 ? "#2d5fd2" :
-        stage.type === 2 ? "#32beba" : "#888";
-      segment.title = stage.label + " — " + next.label + ": " +
-        (stage.type === 1 ? rogbidT(this._config,this._hass,"deep") : stage.type === 2 ? rogbidT(this._config,this._hass,"light") : rogbidT(this._config,this._hass,"other"));
-      track.append(segment);
-    }
-    detail.append(track);
-    // Vertical stage timeline: deep below light, waking at the top.
-    const ns="http://www.w3.org/2000/svg";
-    const svg=document.createElementNS(ns,"svg");
-    svg.setAttribute("viewBox","0 0 600 150");
-    svg.setAttribute("role","img");
-    svg.setAttribute("aria-label",rogbidT(this._config,this._hass,"sleepStages"));
-    svg.style.cssText="display:block;width:100%;height:auto;margin:12px 0";
-    const level=type=>type===1?120:type===2?75:25;
-    const color=type=>type===1?"#2d5fd2":type===2?"#32beba":"#ef9c51";
+    const track=document.createElement("div");track.className="stage-track";
+    const color=type=>sleepColor(this._config,type===1?"deep":type===2?"light":"awake");
     for(let i=0;i<timeline.length-1;i++){
       const stage=timeline[i],next=timeline[i+1];
       if(next.time<=stage.time)continue;
-      const x=12+(stage.time-start)/(end-start)*576;
-      const width=(next.time-stage.time)/(end-start)*576;
-      const rect=document.createElementNS(ns,"rect");
-      rect.setAttribute("x",String(x));rect.setAttribute("y",String(level(stage.type)-8));
-      rect.setAttribute("width",String(width));rect.setAttribute("height","16");
-      rect.setAttribute("fill",color(stage.type));
-      const tip=document.createElementNS(ns,"title");
-      tip.textContent=stage.label+"–"+next.label;
-      rect.append(tip);svg.append(rect);
-      if(i<timeline.length-2){
-        const connector=document.createElementNS(ns,"line");
-        connector.setAttribute("x1",String(x+width));connector.setAttribute("x2",String(x+width));
-        connector.setAttribute("y1",String(level(stage.type)));connector.setAttribute("y2",String(level(next.type)));
-        connector.setAttribute("stroke","#9ba5b3");connector.setAttribute("stroke-width","1.5");
-        svg.append(connector);
-      }
+      const segment=document.createElement("div");segment.className="stage-segment";
+      segment.style.flex=String(next.time-stage.time);
+      segment.style.backgroundColor=color(stage.type);
+      segment.title=stage.label+"–"+next.label;
+      track.append(segment);
     }
-    detail.append(svg);
+    detail.append(track);
     const labels = document.createElement("div");
     labels.className = "stage-labels";
     for (const label of [timeline[0].label, timeline[timeline.length - 1].label]) {
@@ -614,10 +587,7 @@ class RogbidHistoryCard extends HTMLElement {
       labels.append(span);
     }
     detail.append(labels);
-    const legend = document.createElement("div");
-    legend.className = "legend";
-    legend.textContent = "🔵 " + rogbidT(this._config,this._hass,"deep") + "   🟢 " + rogbidT(this._config,this._hass,"light") + "   🟠 " + rogbidT(this._config,this._hass,"awake");
-    detail.append(legend);
+
     const old = area.querySelector(".sleep-detail");
     if (old) old.remove();
     area.prepend(detail);
@@ -760,6 +730,20 @@ class RogbidHistoryCardEditor extends HTMLElement {
       const row=document.createElement("label");row.style.cssText="display:flex;gap:8px;align-items:center;margin:6px 0";
       row.append(toggle,document.createTextNode(kind==="steps"?t("steps"):kind));this.append(row);
     }
+    const sleepSettingsTitle=document.createElement("div");sleepSettingsTitle.textContent=t("sleepColors");sleepSettingsTitle.style.marginTop="12px";this.append(sleepSettingsTitle);
+    for(const kind of ["deep","light","awake"]){
+      const row=document.createElement("label");row.style.cssText="display:flex;align-items:center;gap:10px;margin:7px 0";
+      const color=document.createElement("input");color.type="color";color.value=sleepColor(this._config,kind);
+      color.addEventListener("change",()=>this._update("sleep_colors",{...(this._config.sleep_colors||{}),[kind]:color.value}));
+      row.append(color,document.createTextNode(t(kind)));this.append(row);
+    }
+    const summaryStyle=document.createElement("select");
+    for(const [value,label] of [["square",t("sleepSquare")],["text",t("sleepColoredText")]]){
+      const option=document.createElement("option");option.value=value;option.textContent=label;summaryStyle.append(option);
+    }
+    summaryStyle.value=this._config.sleep_summary_style==="text"?"text":"square";
+    summaryStyle.addEventListener("change",()=>this._update("sleep_summary_style",summaryStyle.value));
+    add(t("sleepSummaryStyle"),summaryStyle);
     const monthlyTitle=document.createElement("div");
     monthlyTitle.textContent=(rogbidLang(this._config,this._hass)==="ru"?"Месячные графики":"Monthly charts");
     monthlyTitle.style.marginTop="12px";this.append(monthlyTitle);
