@@ -1,6 +1,6 @@
 # Android Home Assistant Template Widgets
 
-[English](android-template-widgets.md) · [Русский](i18n/android-template-widgets.ru.md) · [Français](i18n/android-template-widgets.fr.md) · [Lëtzebuergesch](i18n/android-template-widgets.lb.md) · [Deutsch](i18n/android-template-widgets.de.md) · [Italiano](i18n/android-template-widgets.it.md)
+[English](android-template-widgets.md) · [Russian](i18n/android-template-widgets.ru.md) · [Français](i18n/android-template-widgets.fr.md) · [Lëtzebuergesch](i18n/android-template-widgets.lb.md) · [Deutsch](i18n/android-template-widgets.de.md) · [Italiano](i18n/android-template-widgets.it.md)
 
 These examples are for the **Home Assistant Companion App → Android → Template Widget**, not Lovelace cards. They use Home Assistant Jinja2 and the limited HTML formatting supported by Android.
 
