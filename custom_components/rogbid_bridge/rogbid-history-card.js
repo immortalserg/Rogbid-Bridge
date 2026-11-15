@@ -29,7 +29,7 @@ const orderKinds = v => {
 
 const ROGBID_TRANSLATIONS = {"en":{"heart":"Pulse","oxygen":"Oxygen","steps":"Steps","sleep":"Sleep","date":"Date","wakeDate":"Wake date","duration":"Duration","deep":"Deep","light":"Light","score":"Score","delete":"Delete","loading":"Loading…","empty":"No records yet","noWatch":"No watches configured","showTitle":"Show title","sections":"Visible sections","order":"Button order","limit":"History records (1–500)","height":"History height (px)","display":"History display","table":"Table","graph":"Graph","showDelete":"Show delete buttons","language":"Language","haLanguage":"Home Assistant language","autoWatch":"Automatic watch","cardTitle":"Card title","noNumeric":"No numeric data","noStages":"No sleep stages available","invalidStages":"No valid stage timeline","other":"Other / end","refresh":"Refresh history","confirmDelete":"Delete record from Home Assistant? It will remain on the watch.","deleteError":"Could not delete record","watch":"Watch"},"ru":{"heart":"Пульс","oxygen":"Кислород","steps":"Шаги","sleep":"Сон","date":"Дата","wakeDate":"Дата пробуждения","duration":"Продолжительность","deep":"Глубокий","light":"Лёгкий","score":"Оценка","delete":"Удалить","loading":"Загрузка…","empty":"Записей пока нет","noWatch":"Часы не настроены","showTitle":"Показывать заголовок","sections":"Отображаемые разделы","order":"Порядок кнопок","limit":"Количество записей (1–500)","height":"Высота истории (пикс.)","display":"Отображение истории","table":"Таблица","graph":"График","showDelete":"Показывать кнопки удаления","language":"Язык","haLanguage":"Язык Home Assistant","autoWatch":"Автоматический выбор часов","cardTitle":"Заголовок карточки","noNumeric":"Нет числовых данных","noStages":"Нет данных о фазах сна","invalidStages":"Некорректная шкала фаз сна","other":"Другое / конец","refresh":"Обновить историю","confirmDelete":"Удалить запись из Home Assistant? На часах она останется.","deleteError":"Не удалось удалить запись","watch":"Часы"},"fr":{"heart":"Pouls","oxygen":"Oxygène","steps":"Pas","sleep":"Sommeil","date":"Date","wakeDate":"Date de réveil","duration":"Durée","deep":"Profond","light":"Léger","score":"Score","delete":"Supprimer","loading":"Chargement…","empty":"Aucune donnée","noWatch":"Aucune montre configurée","showTitle":"Afficher le titre","sections":"Sections visibles","order":"Ordre des boutons","limit":"Enregistrements (1–500)","height":"Hauteur (px)","display":"Affichage de l'historique","table":"Tableau","graph":"Graphique","showDelete":"Afficher les boutons de suppression","language":"Langue","haLanguage":"Langue de Home Assistant","autoWatch":"Montre automatique","cardTitle":"Titre de la carte","noNumeric":"Aucune donnée numérique","noStages":"Aucune phase de sommeil","invalidStages":"Chronologie invalide","other":"Autre / fin","refresh":"Actualiser","confirmDelete":"Supprimer de Home Assistant ? La montre conserve cette donnée.","deleteError":"Suppression impossible","watch":"Montre"},"de":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schritte","sleep":"Schlaf","date":"Datum","wakeDate":"Aufwachdatum","duration":"Dauer","deep":"Tief","light":"Leicht","score":"Bewertung","delete":"Löschen","loading":"Laden…","empty":"Keine Einträge","noWatch":"Keine Uhr eingerichtet","showTitle":"Titel anzeigen","sections":"Sichtbare Bereiche","order":"Schaltflächenreihenfolge","limit":"Einträge (1–500)","height":"Höhe (px)","display":"Verlauf anzeigen","table":"Tabelle","graph":"Diagramm","showDelete":"Löschtasten anzeigen","language":"Sprache","haLanguage":"Home Assistant-Sprache","autoWatch":"Uhr automatisch","cardTitle":"Kartentitel","noNumeric":"Keine Zahlenwerte","noStages":"Keine Schlafphasen","invalidStages":"Ungültiger Verlauf","other":"Andere / Ende","refresh":"Aktualisieren","confirmDelete":"Eintrag aus Home Assistant löschen? Auf der Uhr bleibt er erhalten.","deleteError":"Löschen fehlgeschlagen","watch":"Uhr"},"lb":{"heart":"Puls","oxygen":"Sauerstoff","steps":"Schrëtt","sleep":"Schlof","date":"Datum","wakeDate":"Erwächen","duration":"Dauer","deep":"Déif","light":"Liicht","score":"Bewäertung","delete":"Läschen","loading":"Lueden…","empty":"Keng Donnéeën","noWatch":"Keng Auer ageriicht","showTitle":"Titel weisen","sections":"Siichtbar Beräicher","order":"Reiefolleg","limit":"Entréeën (1–500)","height":"Héicht (px)","display":"Geschicht uweisen","table":"Tabell","graph":"Grafik","showDelete":"Läschknäppercher weisen","language":"Sprooch","haLanguage":"Home Assistant-Sprooch","autoWatch":"Automatesch Auer","cardTitle":"Kaartentitel","noNumeric":"Keng numeresch Donnéeën","noStages":"Keng Schlofphasen","invalidStages":"Ongëlteg Zäitlinn","other":"Aner / Enn","refresh":"Aktualiséieren","confirmDelete":"Entrée aus Home Assistant läschen? Op der Auer bleift se.","deleteError":"Läschen net méiglech","watch":"Auer"},"it":{"heart":"Battito","oxygen":"Ossigeno","steps":"Passi","sleep":"Sonno","date":"Data","wakeDate":"Risveglio","duration":"Durata","deep":"Profondo","light":"Leggero","score":"Punteggio","delete":"Elimina","loading":"Caricamento…","empty":"Nessun dato","noWatch":"Nessun orologio configurato","showTitle":"Mostra titolo","sections":"Sezioni visibili","order":"Ordine pulsanti","limit":"Record (1–500)","height":"Altezza (px)","display":"Visualizzazione","table":"Tabella","graph":"Grafico","showDelete":"Mostra pulsanti elimina","language":"Lingua","haLanguage":"Lingua Home Assistant","autoWatch":"Orologio automatico","cardTitle":"Titolo scheda","noNumeric":"Nessun dato numerico","noStages":"Fasi del sonno assenti","invalidStages":"Sequenza non valida","other":"Altro / fine","refresh":"Aggiorna","confirmDelete":"Eliminare da Home Assistant? Resterà sull'orologio.","deleteError":"Eliminazione non riuscita","watch":"Orologio"},"pt":{"heart":"Pulso","oxygen":"Oxigénio","steps":"Passos","sleep":"Sono","date":"Data","wakeDate":"Despertar","duration":"Duração","deep":"Profundo","light":"Leve","score":"Pontuação","delete":"Eliminar","loading":"A carregar…","empty":"Sem registos","noWatch":"Sem relógio configurado","showTitle":"Mostrar título","sections":"Secções visíveis","order":"Ordem dos botões","limit":"Registos (1–500)","height":"Altura (px)","display":"Visualização","table":"Tabela","graph":"Gráfico","showDelete":"Mostrar botões de eliminação","language":"Idioma","haLanguage":"Idioma do Home Assistant","autoWatch":"Relógio automático","cardTitle":"Título do cartão","noNumeric":"Sem dados numéricos","noStages":"Sem fases de sono","invalidStages":"Cronologia inválida","other":"Outro / fim","refresh":"Atualizar","confirmDelete":"Eliminar do Home Assistant? Permanecerá no relógio.","deleteError":"Erro ao eliminar","watch":"Relógio"},"es":{"heart":"Pulso","oxygen":"Oxígeno","steps":"Pasos","sleep":"Sueño","date":"Fecha","wakeDate":"Despertar","duration":"Duración","deep":"Profundo","light":"Ligero","score":"Puntuación","delete":"Eliminar","loading":"Cargando…","empty":"Sin registros","noWatch":"Sin relojes configurados","showTitle":"Mostrar título","sections":"Secciones visibles","order":"Orden de botones","limit":"Registros (1–500)","height":"Altura (px)","display":"Visualización","table":"Tabla","graph":"Gráfico","showDelete":"Mostrar botones de eliminación","language":"Idioma","haLanguage":"Idioma de Home Assistant","autoWatch":"Reloj automático","cardTitle":"Título de tarjeta","noNumeric":"Sin datos numéricos","noStages":"Sin fases de sueño","invalidStages":"Cronología no válida","other":"Otro / fin","refresh":"Actualizar","confirmDelete":"¿Eliminar de Home Assistant? Permanecerá en el reloj.","deleteError":"Error al eliminar","watch":"Reloj"}};
 for(const [lang,translations] of Object.entries(ROGBID_TRANSLATIONS)) {
-  Object.assign(translations, {buttonLabels:({ru:"Подписи кнопок",fr:"Libellés des boutons",de:"Tastenbeschriftungen"}[lang]||"Button labels"),todayTotals:({ru:"Показывать сегодня",fr:"Afficher aujourd’hui",de:"Heute anzeigen"}[lang]||"Show today"),details:({ru:"Подробности",fr:"Détails",de:"Details"}[lang]||"Details")});
+  Object.assign(translations, {buttonLabels:({ru:"Подписи кнопок",fr:"Libellés des boutons",de:"Tastenbeschriftungen"}[lang]||"Button labels"),todayTotals:({ru:"Показывать сегодня",fr:"Afficher aujourd’hui",de:"Heute anzeigen"}[lang]||"Show today"),details:({ru:"Подробности",fr:"Détails",de:"Details"}[lang]||"Details"),awake:({ru:"Пробуждение",fr:"Éveil",de:"Wach"}[lang]||"Awake"),sleepStages:({ru:"Фазы сна",fr:"Phases de sommeil",de:"Schlafphasen"}[lang]||"Sleep stages")});
 }
 const rogbidLang = (config,hass) => {
   const raw = config?.language && config.language !== "auto" ? config.language :
@@ -86,6 +86,7 @@ class RogbidHistoryCard extends HTMLElement {
     if (changed) {
       this._requestId = (this._requestId || 0) + 1;
       this._rows = [];
+      this._selectedSleepId = null;
       this._totalRows = [];
       this._loading = false;
       this._error = "";
@@ -145,7 +146,10 @@ class RogbidHistoryCard extends HTMLElement {
         kind: historyKind(kind),
         limit: Math.max(1,Math.min(500,Number(this._config.history_limit)||200))
       });
-      if (request === this._requestId) this._rows = result.records || [];
+      if (request === this._requestId) {
+        this._rows = result.records || [];
+        if (kind === "sleep" && !this._rows.some(r=>String(r._record_id||r.id||r.sleep_date)===this._selectedSleepId)) this._selectedSleepId=null;
+      }
       if (TOTAL_KINDS.includes(kind) && (showTotals(this._config,kind) || showToday(this._config,kind) || showMonthly(this._config,kind))) {
         // Fetch independently of the chart/table row limit so a year can be summed.
         const totalsResult = await this._hass.callWS({
@@ -572,6 +576,36 @@ class RogbidHistoryCard extends HTMLElement {
       track.append(segment);
     }
     detail.append(track);
+    // Vertical stage timeline: deep below light, waking at the top.
+    const ns="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(ns,"svg");
+    svg.setAttribute("viewBox","0 0 600 150");
+    svg.setAttribute("role","img");
+    svg.setAttribute("aria-label",rogbidT(this._config,this._hass,"sleepStages"));
+    svg.style.cssText="display:block;width:100%;height:auto;margin:12px 0";
+    const level=type=>type===1?120:type===2?75:25;
+    const color=type=>type===1?"#2d5fd2":type===2?"#32beba":"#ef9c51";
+    for(let i=0;i<timeline.length-1;i++){
+      const stage=timeline[i],next=timeline[i+1];
+      if(next.time<=stage.time)continue;
+      const x=12+(stage.time-start)/(end-start)*576;
+      const width=(next.time-stage.time)/(end-start)*576;
+      const rect=document.createElementNS(ns,"rect");
+      rect.setAttribute("x",String(x));rect.setAttribute("y",String(level(stage.type)-8));
+      rect.setAttribute("width",String(width));rect.setAttribute("height","16");
+      rect.setAttribute("fill",color(stage.type));
+      const tip=document.createElementNS(ns,"title");
+      tip.textContent=stage.label+"–"+next.label;
+      rect.append(tip);svg.append(rect);
+      if(i<timeline.length-2){
+        const connector=document.createElementNS(ns,"line");
+        connector.setAttribute("x1",String(x+width));connector.setAttribute("x2",String(x+width));
+        connector.setAttribute("y1",String(level(stage.type)));connector.setAttribute("y2",String(level(next.type)));
+        connector.setAttribute("stroke","#9ba5b3");connector.setAttribute("stroke-width","1.5");
+        svg.append(connector);
+      }
+    }
+    detail.append(svg);
     const labels = document.createElement("div");
     labels.className = "stage-labels";
     for (const label of [timeline[0].label, timeline[timeline.length - 1].label]) {
@@ -582,7 +616,7 @@ class RogbidHistoryCard extends HTMLElement {
     detail.append(labels);
     const legend = document.createElement("div");
     legend.className = "legend";
-    legend.textContent = "■ " + rogbidT(this._config,this._hass,"deep") + " (blue)   ■ " + rogbidT(this._config,this._hass,"light") + " (teal)   ■ " + rogbidT(this._config,this._hass,"other") + " (gray)";
+    legend.textContent = "🔵 " + rogbidT(this._config,this._hass,"deep") + "   🟢 " + rogbidT(this._config,this._hass,"light") + "   🟠 " + rogbidT(this._config,this._hass,"awake");
     detail.append(legend);
     const old = area.querySelector(".sleep-detail");
     if (old) old.remove();
