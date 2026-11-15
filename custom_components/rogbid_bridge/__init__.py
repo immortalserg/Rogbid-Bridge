@@ -155,6 +155,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    if runtime.get('ble_stop'):
+        await runtime['ble_stop']()
     result = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if result:
         hass.data[DOMAIN].pop(entry.entry_id, None)
