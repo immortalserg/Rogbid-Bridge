@@ -1,7 +1,10 @@
-"""Registry for hardware-verified BLE drivers.
+"""Experimental BLE driver registry.
 
-Intentionally empty: no Xiaomi/Amazfit/Garmin support is claimed yet.
+Generic Bluetooth SIG heart-rate support is a protocol candidate only.
+No specific watch models have been hardware verified.
 """
 from .base import DriverRegistry
+from .standard_heart_rate import StandardHeartRateDriver
 
 registry = DriverRegistry()
+registry.register(StandardHeartRateDriver())
