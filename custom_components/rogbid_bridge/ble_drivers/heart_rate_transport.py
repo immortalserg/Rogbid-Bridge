@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Callable
 
 from .base import DriverError, Measurement
 from .heart_rate import (
@@ -28,6 +28,8 @@ class HeartRateSession:
         self._client_factory = client_factory
         self._client = None
         self._counter = 0
+        self._disconnected = asyncio.Event()
+        self._loop = None
 
     def _on_notification(self, _characteristic, payload: bytearray) -> None:
         try:
@@ -45,13 +47,22 @@ class HeartRateSession:
             # A malformed notification must not tear down the BLE callback.
             return
 
+    def _on_disconnect(self, _client):
+        if self._loop is not None:
+            self._loop.call_soon_threadsafe(self._disconnected.set)
+
+    async def wait_disconnected(self):
+        await self._disconnected.wait()
+
     async def __aenter__(self):
+        self._loop = asyncio.get_running_loop()
+        self._disconnected.clear()
         if self._client_factory is None:
             from bleak import BleakClient
             factory = BleakClient
         else:
             factory = self._client_factory
-        client = factory(self.device, timeout=20.0)
+        client = factory(self.device, timeout=20.0, disconnected_callback=self._on_disconnect)
         self._client = client
         try:
             await asyncio.wait_for(client.connect(), timeout=25.0)
