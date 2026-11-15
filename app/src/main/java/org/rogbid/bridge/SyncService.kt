@@ -22,6 +22,28 @@ class SyncService : Service() {
  private var sleepReceiverRegistered = false
  private var sleepBeforeRequest: String? = null
  private var sleepPollGeneration = 0
+ private val sleepIntervalMs = 5 * 60_000L
+ private var sleepRequestDate: String? = null
+ private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
+ private fun sleepCompletedToday(): Boolean {
+  val repo = SleepRepository(this)
+  return try { repo.latest()?.optString("sleep_date") == today() } finally { repo.close() }
+ }
+ private val sleepSchedule = object : Runnable {
+  override fun run() {
+   if (!running) return
+   if (!sleepCompletedToday()) {
+    sleepBeforeRequest = try { SleepCollector(this@SyncService).read()?.let { snapshotKey(it) } }
+     catch (e: Exception) { android.util.Log.w("RogbidSleep", "Baseline read failed", e); null }
+    sleepRequestDate = today()
+    val generation = ++sleepPollGeneration
+    android.util.Log.i("RogbidSleep", "Requesting sleep for ${sleepRequestDate}")
+    sendBroadcast(Intent("com.wiite.get.sleep.data"))
+    handler.postDelayed({ pollSleep(generation) }, 3000L)
+   } else android.util.Log.d("RogbidSleep", "Today complete; sleep request skipped")
+   if (running) handler.postDelayed(this, sleepIntervalMs)
+  }
+ }
  private fun snapshotKey(s: SleepCollector.Snapshot): String =
   listOf(s.start, s.end, s.duration.toString(), s.stages).joinToString("|")
 
@@ -48,14 +70,24 @@ class SyncService : Service() {
  // The vendor may write its provider late or send no public response broadcast.
  // Poll for changes and log each failed read without losing the next sync.
  private fun pollSleep(generation: Int, attempt: Int = 0) {
-  if (!running || generation != sleepPollGeneration) return
+  if (!running || generation != sleepPollGeneration || sleepCompletedToday()) return
   try {
    val snapshot = SleepCollector(this).read()
    if (snapshot != null) {
     val key = snapshotKey(snapshot)
     val changed = sleepBeforeRequest != key
     val wakeDate = recentWakeDate(snapshot.end)
-    if (wakeDate != null) {
+    if (wakeDate != null && wakeDate == sleepRequestDate) {
+     // The provider has no date. Do not treat yesterday's unchanged snapshot as new.
+     val repo = SleepRepository(this)
+     val previous = try { repo.latest() } finally { repo.close() }
+     if (previous != null && previous.optString("sleep_date") != wakeDate &&
+         previous.optString("start_time") == snapshot.start &&
+         previous.optString("end_time") == snapshot.end &&
+         previous.optString("stages_json") == snapshot.stages) {
+      android.util.Log.i("RogbidSleep", "Previous day's snapshot unchanged; waiting")
+      return
+     }
      val inserted = SleepCollector(this).archive(snapshot, wakeDate)
      android.util.Log.i("RogbidSleep",
       "Sleep attempt=$attempt changed=$changed wakeDate=$wakeDate inserted=$inserted")
@@ -76,28 +108,18 @@ class SyncService : Service() {
    if (intent?.action != "com.wiite.sleep.data" || !running) return
    android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received")
    val generation = sleepPollGeneration
-   handler.postDelayed({ pollSleep(generation) }, 2000L)
+   if (!sleepCompletedToday() && sleepRequestDate == today())
+    handler.postDelayed({ pollSleep(generation) }, 2000L)
   }
  }
- private fun intervalMs(): Long = if (getSharedPreferences("mqtt", MODE_PRIVATE).getBoolean("auto", false))
-  getSharedPreferences("mqtt", MODE_PRIVATE).getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L
- else 60_000L
+ private fun intervalMs(): Long = getSharedPreferences("mqtt", MODE_PRIVATE)
+  .getInt("interval_minutes", 1).coerceIn(1, 60) * 60_000L
  private val sync = object : Runnable {
   override fun run() {
    if (!running) return
    val prefs = getSharedPreferences("mqtt", MODE_PRIVATE)
    prefs.edit().putString("last_attempt", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    try {
-    // Request a fresh UART sleep packet. The reply is handled asynchronously.
-    sleepBeforeRequest = try {
-     SleepCollector(this@SyncService).read()?.let { snapshotKey(it) }
-    } catch (e: Exception) {
-     android.util.Log.w("RogbidSleep", "Cannot read baseline snapshot", e)
-     null
-    }
-    val generation = ++sleepPollGeneration
-    sendBroadcast(Intent("com.wiite.get.sleep.data"))
-    handler.postDelayed({ pollSleep(generation) }, 3000L)
     if (prefs.getBoolean("auto", false)) {
      publish()
      prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
@@ -106,7 +128,7 @@ class SyncService : Service() {
     prefs.edit().putString("last_sync", "ERROR: " + e.javaClass.simpleName + ": " + e.message).apply()
     android.util.Log.e("RogbidBridge", "MQTT sync failed", e)
    }
-   if (running) handler.postDelayed(this, intervalMs())
+   if (running && prefs.getBoolean("auto", false)) handler.postDelayed(this, intervalMs())
   }
  }
  override fun onCreate() {
@@ -136,7 +158,9 @@ class SyncService : Service() {
   }
   if (!running) running = true
   handler.removeCallbacks(sync)
-  handler.post(sync)
+  if (getSharedPreferences("mqtt", MODE_PRIVATE).getBoolean("auto", false)) handler.post(sync)
+  handler.removeCallbacks(sleepSchedule)
+  handler.post(sleepSchedule)
   return START_STICKY
  }
  private fun publish() {
@@ -187,6 +211,7 @@ class SyncService : Service() {
  override fun onDestroy() {
   running = false
   handler.removeCallbacks(sync)
+  handler.removeCallbacks(sleepSchedule)
   ++sleepPollGeneration
   if (sleepReceiverRegistered) {
    unregisterReceiver(sleepReceiver)
