@@ -22,11 +22,12 @@ class SyncService : Service() {
  private var sleepReceiverRegistered = false
  private var sleepBeforeRequest: String? = null
  private var sleepRequestAt = 0L
+ private var sleepPollGeneration = 0
  private fun snapshotKey(s: SleepCollector.Snapshot): String =
   listOf(s.start, s.end, s.duration.toString(), s.stages).joinToString("|")
 
- // Accept only a newly changed provider record with a wake time close to now.
- // The provider has no date; a time-only record cannot otherwise be dated safely.
+ // The vendor provider has no date. A sleep session is eligible only if its
+ // reported wake-up time falls within the last 24 hours.
  private fun recentWakeDate(wakeTime: String): String? {
   val parts = wakeTime.split(":")
   if (parts.size != 2) return null
@@ -41,36 +42,42 @@ class SyncService : Service() {
    set(Calendar.MILLISECOND, 0)
    if (timeInMillis > now) add(Calendar.DAY_OF_MONTH, -1)
   }
-  if (now - wake.timeInMillis > 3 * 60 * 60 * 1000L) return null
+  if (now - wake.timeInMillis > 24L * 60 * 60 * 1000) return null
   return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(wake.time)
  }
+
+ // The vendor may write its provider late or send no public response broadcast.
+ // Poll for changes and log each failed read without losing the next sync.
+ private fun pollSleep(generation: Int, attempt: Int = 0) {
+  if (!running || generation != sleepPollGeneration) return
+  try {
+   val snapshot = SleepCollector(this).read()
+   if (snapshot != null) {
+    val key = snapshotKey(snapshot)
+    val changed = sleepBeforeRequest != key
+    val wakeDate = recentWakeDate(snapshot.end)
+    if (wakeDate != null) {
+     val inserted = SleepCollector(this).archive(snapshot, wakeDate)
+     android.util.Log.i("RogbidSleep",
+      "Sleep attempt=$attempt changed=$changed wakeDate=$wakeDate inserted=$inserted")
+     if (inserted || !changed) return
+    } else {
+     android.util.Log.i("RogbidSleep",
+      "Sleep attempt=$attempt changed=$changed: wake time outside 24h")
+    }
+   } else android.util.Log.i("RogbidSleep", "Sleep attempt=$attempt: no valid snapshot")
+  } catch (e: Exception) {
+   android.util.Log.w("RogbidSleep", "Sleep attempt=$attempt failed", e)
+  }
+  if (attempt < 10) handler.postDelayed({ pollSleep(generation, attempt + 1) }, 3000L)
+ }
+
  private val sleepReceiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
    if (intent?.action != "com.wiite.sleep.data" || !running) return
-   // The stock sleep app receives the same broadcast and updates its provider
-   // asynchronously. Read only after it has had time to process the packet.
-   handler.postDelayed({
-    if (!running) return@postDelayed
-    try {
-     val snapshot = SleepCollector(this@SyncService).read()
-     if (snapshot != null) {
-      val key = snapshotKey(snapshot)
-      val wakeDate = recentWakeDate(snapshot.end)
-      if (sleepRequestAt > 0L && wakeDate != null) {
-       val saved = SleepCollector(this@SyncService).archive(snapshot, wakeDate)
-       android.util.Log.i("RogbidSleep",
-        "Fresh sleep snapshot: wakeDate=" + wakeDate + ", inserted=" + saved)
-      } else {
-       android.util.Log.i("RogbidSleep",
-        "Sleep snapshot not archived: missing recent wake date")
-      }
-     } else {
-      android.util.Log.w("RogbidSleep", "Sleep response received but provider has no valid snapshot")
-     }
-    } catch (e: Exception) {
-     android.util.Log.e("RogbidSleep", "Cannot read sleep snapshot", e)
-    }
-   }, 2000L)
+   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received")
+   val generation = sleepPollGeneration
+   handler.postDelayed({ pollSleep(generation) }, 2000L)
   }
  }
  private fun intervalMs(): Long = (getSharedPreferences("mqtt", MODE_PRIVATE)
@@ -89,7 +96,9 @@ class SyncService : Service() {
      null
     }
     sleepRequestAt = System.currentTimeMillis()
+    val generation = ++sleepPollGeneration
     sendBroadcast(Intent("com.wiite.get.sleep.data"))
+    handler.postDelayed({ pollSleep(generation) }, 3000L)
     publish()
     prefs.edit().putString("last_sync", "OK: " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())).apply()
    } catch (e: Exception) {
@@ -178,6 +187,7 @@ class SyncService : Service() {
  override fun onDestroy() {
   running = false
   handler.removeCallbacks(sync)
+  ++sleepPollGeneration
   if (sleepReceiverRegistered) {
    unregisterReceiver(sleepReceiver)
    sleepReceiverRegistered = false
