@@ -525,7 +525,7 @@ class RogbidHistoryCard extends HTMLElement {
       (record.start_time || "") + "–" + (record.end_time || "");
     detail.append(title);
     const summary=document.createElement("div");summary.className="sleep-summary";
-    for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.awake_minutes]]) {
+    for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.awake_minutes ?? null]]) {
       const cell=document.createElement("div");const label=document.createElement("small");label.textContent=name;
       const amount=document.createElement("strong");amount.textContent=formatRogbidMinutes(value,rogbidLang(this._config,this._hass));
       const color=sleepColor(this._config,kind);
@@ -566,6 +566,13 @@ class RogbidHistoryCard extends HTMLElement {
       const hint=document.createElement("div");hint.className="hint";
       hint.textContent=rogbidT(this._config,this._hass,"invalidStages");detail.append(hint);
       const old=area.querySelector(".sleep-detail");if(old)old.remove();area.prepend(detail);return;
+    }
+    // Wake periods are derived from stage intervals when the provider omits awake_minutes.
+    if(record.awake_minutes == null){
+      let awake=0;
+      for(let i=0;i<timeline.length-1;i++) if(timeline[i].type===3) awake+=Math.max(0,timeline[i+1].time-timeline[i].time);
+      const awakeAmount=summary.children[2]?.querySelector("strong");
+      if(awakeAmount) awakeAmount.textContent=formatRogbidMinutes(awake,rogbidLang(this._config,this._hass));
     }
     const track=document.createElement("div");track.className="stage-track";
     const color=type=>sleepColor(this._config,type===1?"deep":type===2?"light":"awake");
