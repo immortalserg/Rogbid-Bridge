@@ -68,9 +68,8 @@ async def async_setup_ble_entry(hass, entry):
             device = bluetooth.async_ble_device_from_address(hass, address, connectable=True)
             if device is not None:
                 try:
-                    async with HeartRateSession(device, on_measurement):
-                        while True:
-                            await asyncio.sleep(5)
+                    async with HeartRateSession(device, on_measurement) as session:
+                        await session.wait_disconnected()
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -80,10 +79,16 @@ async def async_setup_ble_entry(hass, entry):
     consumer = hass.async_create_task(consume())
     streamer = hass.async_create_task(stream())
 
-    def stop():
+    async def stop():
         streamer.cancel()
+        await asyncio.gather(streamer, return_exceptions=True)
+        try:
+            await asyncio.wait_for(queue.join(), timeout=10)
+        except asyncio.TimeoutError:
+            _LOGGER.warning("BLE queue did not drain before unload for %s", device_id)
         consumer.cancel()
+        await asyncio.gather(consumer, return_exceptions=True)
 
-    entry.async_on_unload(stop)
+    hass.data[DOMAIN][entry.entry_id]["ble_stop"] = stop
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     return True
