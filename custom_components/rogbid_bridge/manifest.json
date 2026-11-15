@@ -1,7 +1,7 @@
 {
   "domain": "rogbid_bridge",
   "name": "Watch Bridge",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "documentation": "https://github.com/immortalserg/Watch-bridge",
   "issue_tracker": "https://github.com/immortalserg/Watch-bridge/issues",
   "codeowners": [
