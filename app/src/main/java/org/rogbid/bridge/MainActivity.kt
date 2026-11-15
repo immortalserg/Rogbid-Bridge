@@ -348,9 +348,8 @@ class MainActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   L10n.init(this)
-  if (prefs.getBoolean("auto", false)) {
-   startForegroundService(Intent(this, SyncService::class.java))
-  }
+  // Sleep collection must run even when MQTT auto-publishing is disabled.
+  startForegroundService(Intent(this, SyncService::class.java))
   showHome()
  }
  private fun showHome() {
@@ -935,8 +934,8 @@ class MainActivity : Activity() {
      .putString("port", number.toString()).putString("user", user.text.toString())
      .putString("password", pass.text.toString())
      .putInt("interval_minutes", minutes).putBoolean("auto", autoSync.isChecked).apply()
-    if (autoSync.isChecked) startForegroundService(Intent(this, SyncService::class.java))
-    else stopService(Intent(this, SyncService::class.java))
+    // Keep sleep collection alive regardless of the MQTT auto-sync setting.
+    startForegroundService(Intent(this, SyncService::class.java))
     showSettings()
    }
   })

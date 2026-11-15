@@ -37,7 +37,7 @@ class SleepCollector(private val context: Context) {
 
  fun read(): Snapshot? {
   context.contentResolver.query(
-   Uri.parse("content://com.wiite.provider/sleep"), null, null, null, null
+   Uri.parse("content://com.wiite.provider/sleep"), null, null, null, "_id DESC"
   )?.use { cursor ->
    if (!cursor.moveToFirst()) return null
 
