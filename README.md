@@ -4,6 +4,10 @@ Multi-device smartwatch bridge for MQTT telemetry and historical activity synchr
 
 > **Status:** Rogbid Z10 Android 9 app v0.6.1; Wear OS support is planned. Signed APK builds are produced by GitHub Actions.
 
+## Android Home Assistant widgets
+
+Ready-to-copy Android Home Assistant Companion **Template Widget** examples for steps, calories, distance and last sleep (including a compact sleep-stage timeline): [Android widget documentation](docs/android-template-widgets.md).
+
 ## Screenshots
 
 Screenshots from the Rogbid Z10 smartwatch interface:
