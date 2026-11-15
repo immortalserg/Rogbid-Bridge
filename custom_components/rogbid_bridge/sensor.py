@@ -5,6 +5,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from datetime import timedelta
+import json
 import logging
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.event import async_track_time_interval
@@ -35,6 +36,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     for metric, unit in (("steps", "steps"), ("kcal", "kcal"), ("diatance", "km")):
         for days in (7, 30, 365):
             entities.append(RogbidTotalSensor(entry, runtime["journal"], metric, unit, days))
+    entities.append(RogbidLastSleepSensor(entry, runtime["journal"]))
     async_add_entities(entities, True)
 
 class RogbidSensor(SensorEntity):
@@ -110,6 +112,77 @@ class RogbidTotalSensor(SensorEntity):
             self._attr_available = True
         except Exception:
             _LOGGER.exception("Failed to read Rogbid history totals for %s", self._device_id)
+            self._attr_available = False
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(async_dispatcher_connect(
+            self.hass, self._signal, self._schedule_refresh
+        ))
+        self.async_on_remove(async_track_time_interval(
+            self.hass, self._scheduled_refresh, timedelta(minutes=5)
+        ))
+
+    def _schedule_refresh(self):
+        self.hass.async_create_task(self._refresh())
+
+    async def _scheduled_refresh(self, _now):
+        await self._refresh()
+
+    async def _refresh(self):
+        await self.async_update()
+        self.async_write_ha_state()
+
+class RogbidLastSleepSensor(SensorEntity):
+    """Latest sleep record; structured JSON is exposed as HA attributes."""
+    _attr_has_entity_name = True
+    _attr_name = "Last sleep details"
+    _attr_icon = "mdi:sleep"
+
+    def __init__(self, entry, journal):
+        self._journal = journal
+        self._device_id = entry.data[CONF_DEVICE_ID]
+        self._attr_unique_id = f"{self._device_id}_last_sleep_details"
+        self._attr_native_value = None
+        self._attr_extra_state_attributes = {}
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._device_id)},
+            name=f"Rogbid {self._device_id}",
+            manufacturer="Rogbid",
+            model="Z10",
+        )
+        self._signal = f"{DOMAIN}_{entry.entry_id}_update"
+
+    async def async_update(self):
+        try:
+            rows = await self.hass.async_add_executor_job(
+                self._journal.recent, self._device_id, "sleep", 1
+            )
+            if not rows:
+                self._attr_native_value = None
+                self._attr_extra_state_attributes = {}
+                return
+            record = rows[0]
+            stages = record.get("stages_json", record.get("sleep_stages", []))
+            if isinstance(stages, str):
+                stages = json.loads(stages)
+            if not isinstance(stages, list):
+                stages = []
+            details = {
+                "sleep_date": record.get("sleep_date", record.get("measured_at", "")[:10]),
+                "start_time": record.get("start_time", record.get("sleep_start")),
+                "end_time": record.get("end_time", record.get("sleep_end")),
+                "duration_minutes": record.get("duration_minutes", record.get("sleep_duration")),
+                "deep_minutes": record.get("deep_minutes", record.get("sleep_deep")),
+                "light_minutes": record.get("light_minutes", record.get("sleep_light")),
+                "rem_minutes": record.get("rem_minutes", record.get("fast_minutes", record.get("sleep_fast"))),
+                "stages": stages,
+            }
+            # HA states have a 255-character limit; keep JSON in attributes.
+            self._attr_native_value = details["sleep_date"] or "unknown"
+            self._attr_extra_state_attributes = {"sleep_json": details, **details}
+            self._attr_available = True
+        except Exception:
+            _LOGGER.exception("Failed to read latest Rogbid sleep record")
             self._attr_available = False
 
     async def async_added_to_hass(self):
