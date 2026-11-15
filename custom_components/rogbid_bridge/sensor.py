@@ -4,9 +4,15 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
+from datetime import timedelta
+import logging
+from homeassistant.util import dt as dt_util
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN, CONF_DEVICE_ID
+
+_LOGGER = logging.getLogger(__name__)
 
 SENSORS = (
     SensorEntityDescription(key="steps", name="Steps", native_unit_of_measurement="steps", state_class=SensorStateClass.MEASUREMENT),
@@ -21,10 +27,15 @@ SENSORS = (
 )
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([
-        RogbidSensor(entry, description, hass.data[DOMAIN][entry.entry_id]["state"])
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    entities = [
+        RogbidSensor(entry, description, runtime["state"])
         for description in SENSORS
-    ])
+    ]
+    for metric, unit in (("steps", "steps"), ("kcal", "kcal"), ("diatance", "km")):
+        for days in (7, 30, 365):
+            entities.append(RogbidTotalSensor(entry, runtime["journal"], metric, unit, days))
+    async_add_entities(entities, True)
 
 class RogbidSensor(SensorEntity):
     _attr_has_entity_name = True
@@ -61,3 +72,60 @@ class RogbidSensor(SensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(self.hass, self._signal, self.async_write_ha_state)
         )
+
+class RogbidTotalSensor(SensorEntity):
+    """Rolling daily totals from the watch's durable SQLite history."""
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry, journal, metric, unit, days):
+        self._journal = journal
+        self._device_id = entry.data[CONF_DEVICE_ID]
+        self._metric = metric
+        self._days = days
+        self._attr_name = f"{'Distance' if metric == 'diatance' else 'Calories' if metric == 'kcal' else 'Steps'} last {days} days"
+        self._attr_unique_id = f"{self._device_id}_{metric}_last_{days}_days"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_native_value = None
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._device_id)},
+            name=f"Rogbid {self._device_id}",
+            manufacturer="Rogbid",
+            model="Z10",
+        )
+        self._signal = f"{DOMAIN}_{entry.entry_id}_update"
+
+    async def async_update(self):
+        end = dt_util.now().date()
+        start = end - timedelta(days=self._days - 1)
+        try:
+            totals = await self.hass.async_add_executor_job(
+                self._journal.step_totals, self._device_id,
+                start.isoformat(), end.isoformat(),
+            )
+            value = totals[self._metric]
+            if self._metric in ("kcal", "diatance"):
+                value /= 1000
+            self._attr_native_value = round(value, 1) if self._metric == "diatance" else round(value)
+            self._attr_available = True
+        except Exception:
+            _LOGGER.exception("Failed to read Rogbid history totals for %s", self._device_id)
+            self._attr_available = False
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(async_dispatcher_connect(
+            self.hass, self._signal, self._schedule_refresh
+        ))
+        self.async_on_remove(async_track_time_interval(
+            self.hass, self._scheduled_refresh, timedelta(minutes=5)
+        ))
+
+    def _schedule_refresh(self):
+        self.hass.async_create_task(self._refresh())
+
+    async def _scheduled_refresh(self, _now):
+        await self._refresh()
+
+    async def _refresh(self):
+        await self.async_update()
+        self.async_write_ha_state()
