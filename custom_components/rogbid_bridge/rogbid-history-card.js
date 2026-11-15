@@ -522,7 +522,8 @@ class RogbidHistoryCard extends HTMLElement {
     detail.className = "sleep-detail";
     const title = document.createElement("strong");
     title.textContent = (record.sleep_date || "") + "  " +
-      (record.start_time || "") + "–" + (record.end_time || "");
+      (record.start_time || "") + "–" + (record.end_time || "") +
+      " · " + formatRogbidMinutes(record.duration_minutes,rogbidLang(this._config,this._hass));
     detail.append(title);
     const summary=document.createElement("div");summary.className="sleep-summary";
     for(const [kind,name,value] of [["deep",rogbidT(this._config,this._hass,"deep"),record.deep_minutes],["light",rogbidT(this._config,this._hass,"light"),record.light_minutes],["awake",rogbidT(this._config,this._hass,"awake"),record.awake_minutes ?? null]]) {
@@ -548,7 +549,7 @@ class RogbidHistoryCard extends HTMLElement {
       return;
     }
     const minute = value => {
-      if (typeof value !== "string" || !/^\\d{1,2}:\\d{2}$/.test(value)) return null;
+      if (typeof value !== "string" || !/^\d{1,2}:\d{2}$/.test(value)) return null;
       const [hour, min] = value.split(":").map(Number);
       return hour < 24 && min < 60 ? hour * 60 + min : null;
     };
@@ -567,18 +568,11 @@ class RogbidHistoryCard extends HTMLElement {
       hint.textContent=rogbidT(this._config,this._hass,"invalidStages");detail.append(hint);
       const old=area.querySelector(".sleep-detail");if(old)old.remove();area.prepend(detail);return;
     }
-    // Wake periods are derived from stage intervals when the provider omits awake_minutes.
-    if(record.awake_minutes == null){
-      let awake=0;
-      for(let i=0;i<timeline.length-1;i++) if(timeline[i].type===3) awake+=Math.max(0,timeline[i+1].time-timeline[i].time);
-      const awakeAmount=summary.children[2]?.querySelector("strong");
-      if(awakeAmount) awakeAmount.textContent=formatRogbidMinutes(awake,rogbidLang(this._config,this._hass));
-    }
     const track=document.createElement("div");track.className="stage-track";
-    const color=type=>sleepColor(this._config,type===1?"deep":type===2?"light":"awake");
+    const color=type=>sleepColor(this._config,type===1?"deep":"light");
     for(let i=0;i<timeline.length-1;i++){
       const stage=timeline[i],next=timeline[i+1];
-      if(next.time<=stage.time)continue;
+      if(next.time<=stage.time || (stage.type!==1 && stage.type!==2))continue;
       const segment=document.createElement("div");segment.className="stage-segment";
       segment.style.flex=String(next.time-stage.time);
       segment.style.backgroundColor=color(stage.type);
