@@ -52,7 +52,14 @@ class SleepRepository(context: Context) :
    put("stages_json", stages)
    put("first_seen", System.currentTimeMillis())
   }
-  return writableDatabase.insertWithOnConflict(
+  val db = writableDatabase
+  // Update a night's existing snapshot instead of creating duplicate history rows.
+  val updated = db.update(
+   "sleep_history", values, "sleep_date = ? AND start_time = ? AND end_time = ?",
+   arrayOf(date, start, end)
+  )
+  if (updated > 0) return true
+  return db.insertWithOnConflict(
    "sleep_history", null, values, SQLiteDatabase.CONFLICT_IGNORE
   ) != -1L
  }
