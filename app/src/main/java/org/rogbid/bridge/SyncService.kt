@@ -28,18 +28,13 @@ class SyncService : Service() {
  private val sleepSchedule = object : Runnable {
   override fun run() {
    if (!running) return
-   val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-   if (hour < 10) {
-    sleepBeforeRequest = try { SleepCollector(this@SyncService).read()?.let { snapshotKey(it) } }
-     catch (e: Exception) { android.util.Log.w("RogbidSleep", "Baseline read failed", e); null }
-    sleepRequestDate = today()
-    val generation = ++sleepPollGeneration
-    android.util.Log.i("RogbidSleep", "Requesting sleep for ${sleepRequestDate}")
-    sendBroadcast(Intent("com.wiite.get.sleep.data"))
-    handler.postDelayed({ pollSleep(generation) }, 3000L)
-   } else {
-    android.util.Log.d("RogbidSleep", "Sleep polling paused after 10:00")
-   }
+   sleepBeforeRequest = try { SleepCollector(this@SyncService).read()?.let { snapshotKey(it) } }
+    catch (e: Exception) { android.util.Log.w("RogbidSleep", "Baseline read failed", e); null }
+   sleepRequestDate = today()
+   val generation = ++sleepPollGeneration
+   android.util.Log.i("RogbidSleep", "Requesting sleep for ${sleepRequestDate}")
+   sendBroadcast(Intent("com.wiite.get.sleep.data"))
+   handler.postDelayed({ pollSleep(generation) }, 3000L)
    if (running) handler.postDelayed(this, sleepIntervalMs)
   }
  }
