@@ -152,6 +152,7 @@ class SyncService : Service() {
  }
  override fun onCreate() {
   super.onCreate()
+  BootDiagnosticJob.schedule(this)
   L10n.init(this)
   worker.start()
   handler = Handler(worker.looper)
