@@ -115,6 +115,14 @@ class SyncService : Service() {
    } ?: "none"
    val rawSleep = intent.getByteArrayExtra("data")
    android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary; dataBytes=${rawSleep?.size ?: 0}")
+   if (rawSleep != null) {
+    val decoded = VendorSleepDecoder.decode(rawSleep)
+    android.util.Log.i("RogbidSleep",
+     "Raw sleep diagnostic: points=${decoded?.points?.size ?: 0} " +
+     "code=${decoded?.code} first=${decoded?.firstSleep} " +
+     "wake=${decoded?.lastWake} duration=${decoded?.durationMinutes} " +
+     "stageMinutes=${decoded?.stageMinutes}")
+   }
    // The scheduled retry chain already checks the provider. Starting another
    // chain here caused duplicate attempts every three seconds.
   }
