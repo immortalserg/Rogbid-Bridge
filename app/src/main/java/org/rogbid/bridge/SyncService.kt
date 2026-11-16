@@ -169,6 +169,13 @@ class SyncService : Service() {
   startForeground(1001, notification)
   registerReceiver(sleepReceiver, IntentFilter("com.wiite.sleep.data"))
   sleepReceiverRegistered = true
+  // BLE transport is independent of MQTT publishing and stays available while
+  // the foreground synchronization service is alive.
+  try {
+   startService(Intent(this, BleGattService::class.java))
+  } catch (e: Exception) {
+   android.util.Log.w("WatchBridgeBLE", "Cannot start BLE GATT service", e)
+  }
  }
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   if (intent?.action == "STOP") {
