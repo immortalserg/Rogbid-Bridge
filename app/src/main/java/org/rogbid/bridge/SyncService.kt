@@ -107,10 +107,15 @@ class SyncService : Service() {
  private val sleepReceiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
    if (intent?.action != "com.wiite.sleep.data" || !running) return
-   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received")
-   val generation = sleepPollGeneration
-   if (sleepRequestDate == today())
-    handler.postDelayed({ pollSleep(generation) }, 2000L)
+   // Log metadata only: never dump sleep history or raw broadcast payloads.
+   val extras = intent.extras
+   val summary = extras?.keySet()?.sorted()?.joinToString { key ->
+    val value = try { extras.get(key) } catch (e: Exception) { null }
+    "$key:${value?.javaClass?.simpleName ?: "null"}"
+   } ?: "none"
+   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary")
+   // The scheduled retry chain already checks the provider. Starting another
+   // chain here caused duplicate attempts every three seconds.
   }
  }
  private fun intervalMs(): Long = getSharedPreferences("mqtt", MODE_PRIVATE)
