@@ -62,6 +62,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                                               client_factory=lambda *a, **k: client):
             client.callback(None, bytearray([0, 72]))
             client.callback(None, bytearray([1]))  # malformed, ignored
+            await asyncio.sleep(0)  # drain thread-safe notification scheduling
         self.assertEqual(len(readings), 1)
         self.assertEqual(readings[0].values["heart_rate"], 72)
         self.assertTrue(client.stopped)
