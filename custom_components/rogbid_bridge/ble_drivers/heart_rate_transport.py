@@ -30,6 +30,7 @@ class HeartRateSession:
         self._counter = 0
         self._disconnected = asyncio.Event()
         self._loop = None
+        self._notification_error = None
 
     def _on_notification(self, _characteristic, payload: bytearray) -> None:
         try:
@@ -42,7 +43,8 @@ class HeartRateSession:
                 record_id=f"ble-heart:{self._counter}:{now}",
                 values=decoded,
             )
-            self.on_measurement(reading)
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self.on_measurement, reading)
         except (DriverError, ValueError):
             # A malformed notification must not tear down the BLE callback.
             return
