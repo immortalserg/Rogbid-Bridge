@@ -113,7 +113,8 @@ class SyncService : Service() {
     val value = try { extras.get(key) } catch (e: Exception) { null }
     "$key:${value?.javaClass?.simpleName ?: "null"}"
    } ?: "none"
-   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary")
+   val rawSleep = intent.getByteArrayExtra("data")
+   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary; dataBytes=${rawSleep?.size ?: 0}")
    // The scheduled retry chain already checks the provider. Starting another
    // chain here caused duplicate attempts every three seconds.
   }
