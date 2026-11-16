@@ -4,6 +4,7 @@
  <uses-permission android:name="android.permission.BODY_SENSORS" />
  <uses-permission android:name="com.wiite.provider" />
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+ <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -11,6 +12,11 @@
  <application android:label="Rogbid Bridge" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
   <service android:name=".BleGattService" android:exported="false" />
   <service android:name=".SyncService" android:exported="false" />
+  <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false">
+   <intent-filter>
+    <action android:name="android.intent.action.BOOT_COMPLETED" />
+   </intent-filter>
+  </receiver>
   <activity android:name=".BleDiagnosticsActivity" android:exported="false" />
   <activity android:name=".MainActivity" android:exported="true">
    <intent-filter>
