@@ -23,8 +23,8 @@ def journal_payload(measurement: Measurement) -> dict:
     elif measurement.kind == "steps":
         if type(values.get("steps")) is not int or values["steps"] < 0:
             raise ValueError("Invalid steps")
-    return {"kind": measurement.kind, "id": measurement.record_id,
-            "measured_at": measurement.measured_at, **values}
+    return {**values, "kind": measurement.kind, "id": measurement.record_id,
+            "measured_at": measurement.measured_at}
 
 
 class BleJournalWriter:
