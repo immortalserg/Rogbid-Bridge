@@ -12,6 +12,7 @@
  <application android:label="Rogbid Bridge" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
   <service android:name=".BleGattService" android:exported="false" />
   <service android:name=".SyncService" android:exported="false" />
+  <service android:name=".BootDiagnosticJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
   <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false" android:directBootAware="true">
    <intent-filter>
     <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
