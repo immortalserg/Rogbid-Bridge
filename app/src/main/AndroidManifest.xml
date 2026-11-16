@@ -12,9 +12,11 @@
  <application android:label="Rogbid Bridge" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
   <service android:name=".BleGattService" android:exported="false" />
   <service android:name=".SyncService" android:exported="false" />
-  <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false">
+  <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false" android:directBootAware="true">
    <intent-filter>
+    <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
     <action android:name="android.intent.action.BOOT_COMPLETED" />
+    <action android:name="android.intent.action.USER_UNLOCKED" />
    </intent-filter>
   </receiver>
   <activity android:name=".BleDiagnosticsActivity" android:exported="false" />
