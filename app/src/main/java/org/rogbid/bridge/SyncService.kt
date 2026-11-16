@@ -116,6 +116,10 @@ class SyncService : Service() {
    val rawSleep = intent.getByteArrayExtra("data")
    android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary; dataBytes=${rawSleep?.size ?: 0}")
    if (rawSleep != null) {
+    val hex = rawSleep.take(36).joinToString(" ") {
+     "%02X".format(it.toInt() and 0xFF)
+    }
+    android.util.Log.i("RogbidSleep", "Raw sleep bytes: $hex")
     val decoded = VendorSleepDecoder.decode(rawSleep)
     android.util.Log.i("RogbidSleep",
      "Raw sleep diagnostic: points=${decoded?.points?.size ?: 0} " +
