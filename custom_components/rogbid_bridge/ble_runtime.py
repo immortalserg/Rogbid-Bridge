@@ -11,6 +11,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .ble_drivers.heart_rate_transport import HeartRateSession
 from .ble_drivers.persistence import BleJournalWriter
 from .ble_drivers.registry import registry
+from .ble_drivers.reconnect import run_reconnecting_session
 from .const import CONF_DEVICE_ID, DOMAIN
 from .storage import Journal
 
@@ -64,17 +65,13 @@ async def async_setup_ble_entry(hass, entry):
                 queue.task_done()
 
     async def stream():
-        while True:
-            device = bluetooth.async_ble_device_from_address(hass, address, connectable=True)
-            if device is not None:
-                try:
-                    async with HeartRateSession(device, on_measurement) as session:
-                        await session.wait_disconnected()
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    _LOGGER.warning("BLE heart-rate session failed for %s; retrying", address, exc_info=True)
-            await asyncio.sleep(30)
+        await run_reconnecting_session(
+            lambda: bluetooth.async_ble_device_from_address(
+                hass, address, connectable=True
+            ),
+            HeartRateSession,
+            on_measurement,
+        )
 
     consumer = hass.async_create_task(consume())
     streamer = hass.async_create_task(stream())
