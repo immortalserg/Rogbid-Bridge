@@ -148,6 +148,14 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Samsung services") { checkSamsungServices() })
+  root.addView(button("Тест SpO₂ (60 сек)") {
+   spo2Probe?.stop()
+   spo2Probe = SamsungTrackerProbe(this) { message ->
+    runOnUiThread { samsungServicesInfo += "\\n" + message; refresh() }
+   }
+   spo2Probe?.start()
+  })
+  root.addView(button("Остановить SpO₂") { spo2Probe?.stop() })
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
   root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
   root.addView(button("Датчики") { startSensors() })
@@ -162,6 +170,7 @@ class MainActivity : Activity(), SensorEventListener {
  private var samsungServicesInfo = "Not checked"
  private val samsungConnections = mutableListOf<ServiceConnection>()
  private var healthConnectInfo = "Not checked"
+ private var spo2Probe: SamsungTrackerProbe? = null
  private val permissions = arrayOf(
   Manifest.permission.ACTIVITY_RECOGNITION,
   "android.permission.health.READ_HEART_RATE"
@@ -466,6 +475,7 @@ class MainActivity : Activity(), SensorEventListener {
 
  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
  override fun onDestroy() {
+  spo2Probe?.stop()
   for (connection in samsungConnections) try { unbindService(connection) } catch (_: Exception) {}
   samsungConnections.clear()
   super.onDestroy()
