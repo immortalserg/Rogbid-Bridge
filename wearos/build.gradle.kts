@@ -23,7 +23,7 @@ android {
     storeFile = file(keyPath!!)
     storePassword = keyPassword
     this.keyAlias = keyAlias
-    keyPassword = aliasPassword
+    this.keyPassword = aliasPassword
    }
   }
  }
