@@ -21,6 +21,7 @@ import android.content.Intent
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.os.Parcel
 import android.util.Log
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -353,6 +354,32 @@ class MainActivity : Activity(), SensorEventListener {
      Log.i("WatchBridgeSamsung", msg)
      samsungServicesInfo += "\\n" + msg
      refresh()
+     if (label == "Tracker" && descriptor == "com.samsung.android.service.health.tracking.IClientEventListener") {
+      Thread {
+       val request = Parcel.obtain()
+       val response = Parcel.obtain()
+       val result = try {
+        request.writeInterfaceToken(descriptor)
+        val handled = binder.transact(5, request, response, 0)
+        if (!handled) "transaction 5 not handled"
+        else {
+         response.readException()
+         val types = response.createStringArrayList()
+         "Supported trackers: " + (types?.joinToString(", ") ?: "null")
+        }
+       } catch (e: Exception) {
+        "Tracker query failed: ${e.javaClass.simpleName}: ${e.message}"
+       } finally {
+        response.recycle()
+        request.recycle()
+       }
+       Log.i("WatchBridgeSamsung", result)
+       runOnUiThread {
+        samsungServicesInfo += "\\n" + result
+        refresh()
+       }
+      }.start()
+     }
     }
     override fun onServiceDisconnected(name: ComponentName) {
      Log.i("WatchBridgeSamsung", "$label disconnected")
