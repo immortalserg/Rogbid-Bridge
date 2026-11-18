@@ -55,7 +55,9 @@ class MainActivity : Activity(), SensorEventListener {
   gravity = Gravity.CENTER; setPadding(dp(3), dp(6), dp(3), dp(6))
  }
  private fun button(title: String, action: () -> Unit): Button = Button(this).apply {
-  text = title; isAllCaps = false; textSize = 11f; setTextColor(skin().fg)\n  minHeight = dp(34); minimumHeight = dp(34); minWidth = 0; minimumWidth = 0\n  setPadding(dp(8), dp(5), dp(8), dp(5))
+  text = title; isAllCaps = false; textSize = 11f; setTextColor(skin().fg)
+  minHeight = dp(34); minimumHeight = dp(34); minWidth = 0; minimumWidth = 0
+  setPadding(dp(8), dp(5), dp(8), dp(5))
   background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(12).toFloat() }
   setOnClickListener { action() }
  }
@@ -182,7 +184,8 @@ class MainActivity : Activity(), SensorEventListener {
     details.add("${sensor.name}: ${if (registered) "listening" else "registration failed"}")
    }
   }
-  sensorInfo = details.joinToString("\n")
+  sensorInfo = details.joinToString("
+")
   refresh()
  }
 
@@ -202,7 +205,8 @@ class MainActivity : Activity(), SensorEventListener {
    } catch (e: Exception) {
     "root query: ${e.javaClass.simpleName}: ${e.message?.take(100)}"
    }
-   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\n$queryResult"
+   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted
+$queryResult"
   }
   refresh()
  }
@@ -210,17 +214,30 @@ class MainActivity : Activity(), SensorEventListener {
  private fun refresh() {
   if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = steps?.toInt()?.toString() ?: "—" }
   if (screen != "diagnostics" || !::output.isInitialized) return
-  output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
-   "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
-   "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
-   "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
+  output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}
+" +
+   "Heart rate: ${heart?.toString() ?: "waiting"} bpm
+" +
+   "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)
+
+" +
+   "Sensors:
+$sensorInfo
+
+Samsung provider:
+$providerInfo
+
+" +
    "No data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
   if (event.values.isEmpty()) return
   when (event.sensor.type) {
-   Sensor.TYPE_HEART_RATE -> {\n    val bpm = event.values[0]\n    if (bpm.isFinite() && bpm > 0f) heart = bpm\n   }
+   Sensor.TYPE_HEART_RATE -> {
+    val bpm = event.values[0]
+    if (bpm.isFinite() && bpm > 0f) heart = bpm
+   }
    Sensor.TYPE_STEP_COUNTER -> steps = event.values[0]
   }
   refresh()
