@@ -44,7 +44,7 @@ class MainActivity : Activity(), SensorEventListener {
  private fun page(): LinearLayout = LinearLayout(this).apply {
   orientation = LinearLayout.VERTICAL
   gravity = Gravity.CENTER_HORIZONTAL
-  setPadding(dp(14), dp(18), dp(14), dp(18))
+  setPadding(dp(18), dp(16), dp(18), dp(16))
   setBackgroundColor(skin().bg)
  }
  private fun showPage(root: LinearLayout) {
@@ -55,19 +55,19 @@ class MainActivity : Activity(), SensorEventListener {
   gravity = Gravity.CENTER; setPadding(dp(3), dp(6), dp(3), dp(6))
  }
  private fun button(title: String, action: () -> Unit): Button = Button(this).apply {
-  text = title; isAllCaps = false; textSize = 13f; setTextColor(skin().fg)
-  background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(16).toFloat() }
+  text = title; isAllCaps = false; textSize = 11f; setTextColor(skin().fg)\n  minHeight = dp(34); minimumHeight = dp(34); minWidth = 0; minimumWidth = 0\n  setPadding(dp(8), dp(5), dp(8), dp(5))
+  background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(12).toFloat() }
   setOnClickListener { action() }
  }
  private fun tile(title: String, initial: String, action: () -> Unit): Pair<LinearLayout, TextView> {
   val cell = LinearLayout(this).apply {
    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-   setPadding(dp(3), dp(8), dp(3), dp(8))
+   setPadding(dp(3), dp(5), dp(3), dp(5))
    background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(14).toFloat() }
    setOnClickListener { action() }
   }
-  cell.addView(label(title, 14f).apply { setTextColor(skin().accent) })
-  val value = label(initial, 21f).apply { typeface = Typeface.DEFAULT_BOLD }
+  cell.addView(label(title, 11f).apply { setTextColor(skin().accent) })
+  val value = label(initial, 18f).apply { typeface = Typeface.DEFAULT_BOLD }
   cell.addView(value)
   return cell to value
  }
@@ -76,8 +76,8 @@ class MainActivity : Activity(), SensorEventListener {
   val root = page()
   root.addView(label("Watch Bridge", 20f).apply { typeface = Typeface.DEFAULT_BOLD })
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
-  actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(4) })
+  actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
+  actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
   root.addView(actions)
   val first = LinearLayout(this)
   val second = LinearLayout(this)
@@ -87,10 +87,10 @@ class MainActivity : Activity(), SensorEventListener {
   val sleepTile = tile("☾ Сон", "—") { showJournal("sleep") }
   heartValue = heartTile.second; stepsValue = stepsTile.second
   for ((row, cell) in listOf(first to heartTile.first, first to oxygenTile.first, second to stepsTile.first, second to sleepTile.first)) {
-   row.addView(cell, LinearLayout.LayoutParams(0, dp(88), 1f).apply { setMargins(dp(3), dp(3), dp(3), dp(3)) })
+   row.addView(cell, LinearLayout.LayoutParams(0, dp(76), 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
   }
   root.addView(first); root.addView(second)
-  root.addView(button("Настройки") { showSettings() })
+  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
   showPage(root)
  }
  private fun showJournal(kind: String) {
@@ -110,7 +110,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(label("Настройки", 19f))
   root.addView(label("Тема оформления", 14f))
   for (name in listOf("dark","light","forest","sunset","pink","lavender","mint","cream","sky")) {
-   root.addView(button(name) { prefs.edit().putString("skin", name).apply(); showSettings() })
+   root.addView(button(name) { prefs.edit().putString("skin", name).apply(); showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply { setMargins(dp(5), dp(4), dp(5), dp(4)) })
   }
   root.addView(button("Диагностика датчиков") { showDiagnostics() })
   root.addView(label("MQTT: пока не подключён", 12f))
