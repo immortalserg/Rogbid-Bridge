@@ -130,13 +130,41 @@ class MainActivity : Activity(), SensorEventListener {
   screen = "settings"
   val root = page()
   root.addView(label("Настройки", 19f))
-  root.addView(label("Тема оформления", 14f))
-  for (name in listOf("dark","light","forest","sunset","pink","lavender","mint","cream","sky")) {
-   root.addView(button(name) { prefs.edit().putString("skin", name).apply(); showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)).apply { setMargins(dp(5), dp(4), dp(5), dp(4)) })
-  }
+  val currentTheme = prefs.getString("skin", "dark") ?: "dark"
+  root.addView(button("Тема оформления: ${themeTitle(currentTheme)}") { showThemeSelection() },
+   LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(6), dp(5), dp(6)) })
   root.addView(button("Диагностика датчиков") { showDiagnostics() })
   root.addView(label("MQTT: пока не подключён", 12f))
   root.addView(button("Назад") { showHome() })
+  showPage(root)
+ }
+ private fun themeTitle(name: String): String = when (name) {
+  "dark" -> "Тёмная"
+  "light" -> "Светлая"
+  "forest" -> "Лесная"
+  "sunset" -> "Закат"
+  "pink" -> "Розовая"
+  "lavender" -> "Лавандовая"
+  "mint" -> "Мятная"
+  "cream" -> "Кремовая"
+  "sky" -> "Небесная"
+  else -> name
+ }
+ private fun showThemeSelection() {
+  screen = "themes"
+  val root = page()
+  root.addView(label("Тема оформления", 19f))
+  val selected = prefs.getString("skin", "dark") ?: "dark"
+  for (name in listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")) {
+   val prefix = if (name == selected) "✓  " else "○  "
+   root.addView(button(prefix + themeTitle(name)) {
+    prefs.edit().putString("skin", name).apply()
+    showSettings()
+   }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply {
+    setMargins(dp(5), dp(2), dp(5), dp(2))
+   })
+  }
+  root.addView(button("Назад") { showSettings() })
   showPage(root)
  }
  private fun showDiagnostics() {
