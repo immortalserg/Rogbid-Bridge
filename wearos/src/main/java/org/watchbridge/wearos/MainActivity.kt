@@ -196,15 +196,24 @@ class MainActivity : Activity(), SensorEventListener {
   } else {
    val permission = "com.samsung.android.wear.shealth.healthdataprovider.permission.READ"
    val granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-   // Querying the root URI is exploratory only; the provider may require documented paths.
-   val queryResult = try {
-    contentResolver.query(Uri.parse("content://$authority/"), null, null, null, null)?.use {
-     "root query OK, rows=${it.count}"
-    } ?: "root query returned null"
-   } catch (e: Exception) {
-    "root query: ${e.javaClass.simpleName}: ${e.message?.take(100)}"
+   val uri = Uri.parse("content://$authority")
+   val types = listOf("heart_rate", "steps", "sleep", "spo2")
+   val results = types.map { type ->
+    try {
+     val response = contentResolver.call(uri, type, null, Bundle())
+     val summary = if (response == null) "null bundle" else {
+      response.keySet().sorted().joinToString(", ") { key ->
+       val value = response.get(key)
+       "$key=${value?.toString()?.take(120) ?: "null"}"
+      }.ifEmpty { "empty bundle" }
+     }
+     "$type: $summary"
+    } catch (e: Exception) {
+     "$type: ${e.javaClass.simpleName}: ${e.message?.take(160)}"
+    }
    }
-   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\n$queryResult"
+   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\\n" +
+    results.joinToString("\\n")
   }
   refresh()
  }
