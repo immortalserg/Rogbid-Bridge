@@ -54,10 +54,27 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rogbid-release.jks"
           echo "ROGBID_KEYSTORE_PATH=$RUNNER_TEMP/rogbid-release.jks" >> "$GITHUB_ENV"
+          # Preserve the signing identity: only auto-correct an incorrect alias
+          # when the existing keystore contains exactly one private key.
+          if keytool -list -keystore "$RUNNER_TEMP/rogbid-release.jks" -storepass "$ROGBID_KEYSTORE_PASSWORD" -alias "$ROGBID_KEY_ALIAS" >/dev/null 2>&1; then
+            SELECTED_ALIAS="$ROGBID_KEY_ALIAS"
+          else
+            mapfile -t KEY_ALIASES < <(keytool -list -v -keystore "$RUNNER_TEMP/rogbid-release.jks" -storepass "$ROGBID_KEYSTORE_PASSWORD" 2>/dev/null | awk '
+              /^Alias name: / { alias=substr($0,13) }
+              /^Entry type: PrivateKeyEntry/ { if (alias != "") print alias }
+            ')
+            if [[ "${#KEY_ALIASES[@]}" -ne 1 ]]; then
+              echo "::error::ROGBID_KEY_ALIAS does not match the keystore, and a unique signing key could not be identified."
+              exit 1
+            fi
+            SELECTED_ALIAS="${KEY_ALIASES[0]}"
+            echo "::notice::ROGBID_KEY_ALIAS did not match; using the only private key already in the supplied keystore."
+          fi
+          echo "::add-mask::$SELECTED_ALIAS"
+          echo "ROGBID_KEY_ALIAS=$SELECTED_ALIAS" >> "$GITHUB_ENV"
       - name: Build signed release APK
         env:
           ROGBID_KEYSTORE_PASSWORD: ${{ secrets.ROGBID_KEYSTORE_PASSWORD }}
-          ROGBID_KEY_ALIAS: ${{ secrets.ROGBID_KEY_ALIAS }}
           ROGBID_KEY_PASSWORD: ${{ secrets.ROGBID_KEY_PASSWORD }}
         run: gradle :app:assembleRelease --no-daemon
       - name: Remove signing key from runner
