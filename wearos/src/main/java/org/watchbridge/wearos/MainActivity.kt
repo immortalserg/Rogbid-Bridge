@@ -273,12 +273,12 @@ class MainActivity : Activity(), SensorEventListener {
      refresh()
     }
     override fun onError(error: HealthConnectException) {
-     healthConnectInfo += "\\n$title: ${error.javaClass.simpleName}: ${error.message}"
+     healthConnectInfo += "\n$title: ${error.javaClass.simpleName}: ${error.message}"
      refresh()
     }
    })
   } catch (e: Exception) {
-   healthConnectInfo += "\\n$title: ${e.javaClass.simpleName}: ${e.message}"
+   healthConnectInfo += "\n$title: ${e.javaClass.simpleName}: ${e.message}"
    refresh()
   }
  }
