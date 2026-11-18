@@ -1,6 +1,19 @@
 package org.watchbridge.wearos
 
 import android.Manifest
+import android.health.connect.HealthConnectManager
+import android.health.connect.ReadRecordsRequest
+import android.health.connect.ReadRecordsResponse
+import android.health.connect.TimeRangeFilter
+import android.health.connect.HealthConnectException
+import android.health.connect.datatypes.Record
+import android.health.connect.datatypes.SleepSessionRecord
+import android.health.connect.datatypes.HeartRateRecord
+import android.health.connect.datatypes.StepsRecord
+import android.health.connect.datatypes.OxygenSaturationRecord
+import android.os.OutcomeReceiver
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.hardware.Sensor
@@ -127,6 +140,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(output)
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
+  root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
   root.addView(button("Датчики") { startSensors() })
   root.addView(button("Назад") { showSettings() })
   showPage(root); refresh()
@@ -136,9 +150,16 @@ class MainActivity : Activity(), SensorEventListener {
  private var steps: Float? = null
  private var sensorInfo = "Waiting for permissions"
  private var providerInfo = "Not checked"
+ private var healthConnectInfo = "Not checked"
  private val permissions = arrayOf(
   Manifest.permission.ACTIVITY_RECOGNITION,
   "android.permission.health.READ_HEART_RATE"
+ )
+ private val healthPermissions = arrayOf(
+  "android.permission.health.READ_HEART_RATE",
+  "android.permission.health.READ_SLEEP",
+  "android.permission.health.READ_STEPS",
+  "android.permission.health.READ_OXYGEN_SATURATION"
  )
 
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,6 +183,7 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
   super.onRequestPermissionsResult(requestCode, permissions, grantResults)
   if (requestCode == 100) startSensors()
+  if (requestCode == 101) checkHealthConnect()
  }
 
  private fun startSensors() {
@@ -212,8 +234,8 @@ class MainActivity : Activity(), SensorEventListener {
      "$type: ${e.javaClass.simpleName}: ${e.message?.take(160)}"
     }
    }
-   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\\n" +
-    results.joinToString("\\n")
+   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\n" +
+    results.joinToString("\n")
   }
   refresh()
  }
@@ -225,7 +247,7 @@ class MainActivity : Activity(), SensorEventListener {
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "No data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
