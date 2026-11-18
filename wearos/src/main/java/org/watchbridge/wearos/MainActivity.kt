@@ -141,6 +141,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
+  root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
   root.addView(button("Датчики") { startSensors() })
   root.addView(button("Назад") { showSettings() })
   showPage(root); refresh()
@@ -155,6 +156,7 @@ class MainActivity : Activity(), SensorEventListener {
   Manifest.permission.ACTIVITY_RECOGNITION,
   "android.permission.health.READ_HEART_RATE"
  )
+ private var healthPermissionRequestPending = false
  private val healthPermissions = arrayOf(
   "android.permission.health.READ_HEART_RATE",
   "android.permission.health.READ_SLEEP",
@@ -184,6 +186,7 @@ class MainActivity : Activity(), SensorEventListener {
   super.onRequestPermissionsResult(requestCode, permissions, grantResults)
   if (requestCode == 100) startSensors()
   if (requestCode == 101) {
+   healthPermissionRequestPending = false
    val denied = healthPermissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
    healthConnectInfo = if (denied.isEmpty()) "Permissions granted. Tap Health Connect again to read." else
     "Permission denied: " + denied.joinToString(", ") { it.substringAfterLast('.') }
@@ -215,6 +218,25 @@ class MainActivity : Activity(), SensorEventListener {
   refresh()
  }
 
+ private fun requestHealthPermissions() {
+  if (Build.VERSION.SDK_INT < 34 || healthPermissionRequestPending) return
+  val missing = healthPermissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+  if (missing.isEmpty()) {
+   healthConnectInfo = "All Health Connect permissions granted."
+   refresh()
+   return
+  }
+  healthPermissionRequestPending = true
+  healthConnectInfo = "Requesting: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+  refresh()
+  try { requestPermissions(missing.toTypedArray(), 101) }
+  catch (e: Exception) {
+   healthPermissionRequestPending = false
+   healthConnectInfo = "Permission request failed: ${e.javaClass.simpleName}: ${e.message}"
+   refresh()
+  }
+ }
+
  private fun checkHealthConnect() {
   if (Build.VERSION.SDK_INT < 34) {
    healthConnectInfo = "Health Connect requires API 34+"
@@ -223,9 +245,9 @@ class MainActivity : Activity(), SensorEventListener {
   }
   val missing = healthPermissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
   if (missing.isNotEmpty()) {
-   healthConnectInfo = "Missing permissions: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+   healthConnectInfo = "Missing permissions: " + missing.joinToString(", ") { it.substringAfterLast('.') } +
+    "\nUse the separate permission button to request access."
    refresh()
-   requestPermissions(missing.toTypedArray(), 101)
    return
   }
   val hc = getSystemService(HealthConnectManager::class.java)
