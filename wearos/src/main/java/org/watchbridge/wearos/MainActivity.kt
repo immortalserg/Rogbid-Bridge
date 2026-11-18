@@ -183,7 +183,12 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
   super.onRequestPermissionsResult(requestCode, permissions, grantResults)
   if (requestCode == 100) startSensors()
-  if (requestCode == 101) checkHealthConnect()
+  if (requestCode == 101) {
+   val denied = healthPermissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+   healthConnectInfo = if (denied.isEmpty()) "Permissions granted. Tap Health Connect again to read." else
+    "Permission denied: " + denied.joinToString(", ") { it.substringAfterLast('.') }
+   refresh()
+  }
  }
 
  private fun startSensors() {
@@ -266,10 +271,14 @@ class MainActivity : Activity(), SensorEventListener {
     .build()
    hc.readRecords(request, mainExecutor, object : OutcomeReceiver<ReadRecordsResponse<T>, HealthConnectException> {
     override fun onResult(result: ReadRecordsResponse<T>) {
-     val rows = result.records
-     val preview = if (rows.isEmpty()) "No records" else describe(rows)
-     healthConnectInfo += "\n$title: ${rows.size} records; $preview" +
-      if (result.nextPageToken != -1L) " (more pages)" else ""
+     try {
+      val rows = result.records
+      val preview = if (rows.isEmpty()) "No records" else describe(rows)
+      healthConnectInfo += "\n$title: ${rows.size} records; $preview" +
+       if (result.nextPageToken != -1L) " (more pages)" else ""
+     } catch (e: Exception) {
+      healthConnectInfo += "\n$title: result error: ${e.javaClass.simpleName}: ${e.message}"
+     }
      refresh()
     }
     override fun onError(error: HealthConnectException) {
