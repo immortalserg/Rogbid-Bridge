@@ -2,9 +2,9 @@ package org.watchbridge.wearos
 
 import android.Manifest
 import android.health.connect.HealthConnectManager
-import android.health.connect.ReadRecordsRequest
+import android.health.connect.ReadRecordsRequestUsingFilters
 import android.health.connect.ReadRecordsResponse
-import android.health.connect.TimeRangeFilter
+import android.health.connect.TimeInstantRangeFilter
 import android.health.connect.HealthConnectException
 import android.health.connect.datatypes.Record
 import android.health.connect.datatypes.SleepSessionRecord
@@ -260,16 +260,16 @@ class MainActivity : Activity(), SensorEventListener {
   title: String, describe: (List<T>) -> String
  ) {
   try {
-   val request = ReadRecordsRequest.Builder(clazz)
-    .setTimeRangeFilter(TimeRangeFilter.between(from, to))
+   val request = ReadRecordsRequestUsingFilters.Builder(clazz)
+    .setTimeRangeFilter(TimeInstantRangeFilter.Builder().setStartTime(from).setEndTime(to).build())
     .setPageSize(100)
     .build()
    hc.readRecords(request, mainExecutor, object : OutcomeReceiver<ReadRecordsResponse<T>, HealthConnectException> {
     override fun onResult(result: ReadRecordsResponse<T>) {
      val rows = result.records
      val preview = if (rows.isEmpty()) "No records" else describe(rows)
-     healthConnectInfo += "\\n$title: ${rows.size} records; $preview" +
-      if (result.nextPageToken != null) " (more pages)" else ""
+     healthConnectInfo += "\n$title: ${rows.size} records; $preview" +
+      if (result.nextPageToken != -1L) " (more pages)" else ""
      refresh()
     }
     override fun onError(error: HealthConnectException) {
