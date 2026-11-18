@@ -17,6 +17,10 @@ import java.time.temporal.ChronoUnit
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.content.Context
+import android.content.Intent
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.util.Log
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -142,6 +146,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(output)
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
+  root.addView(button("Samsung services") { checkSamsungServices() })
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
   root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
   root.addView(button("Датчики") { startSensors() })
@@ -153,6 +158,8 @@ class MainActivity : Activity(), SensorEventListener {
  private var steps: Float? = null
  private var sensorInfo = "Waiting for permissions"
  private var providerInfo = "Not checked"
+ private var samsungServicesInfo = "Not checked"
+ private val samsungConnections = mutableListOf<ServiceConnection>()
  private var healthConnectInfo = "Not checked"
  private val permissions = arrayOf(
   Manifest.permission.ACTIVITY_RECOGNITION,
@@ -328,6 +335,56 @@ class MainActivity : Activity(), SensorEventListener {
   }
  }
 
+ private fun checkSamsungServices() {
+  samsungServicesInfo = "Binding to Samsung services..."
+  refresh()
+  val targets = listOf(
+   "HSP" to ".data.hsp.HealthPlatformService",
+   "Tracker" to ".tracking.requesthandler.WearTrackerService"
+  )
+  for ((label, className) in targets) {
+   val fullClass = "com.samsung.android.service.health" + className
+   val connection = object : ServiceConnection {
+    override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+     val descriptor = try { binder.interfaceDescriptor } catch (e: Exception) {
+      "error: ${e.javaClass.simpleName}: ${e.message}"
+     }
+     val msg = "$label connected: $descriptor"
+     Log.i("WatchBridgeSamsung", msg)
+     samsungServicesInfo += "\\n" + msg
+     refresh()
+    }
+    override fun onServiceDisconnected(name: ComponentName) {
+     Log.i("WatchBridgeSamsung", "$label disconnected")
+     samsungServicesInfo += "\\n$label disconnected"
+     refresh()
+    }
+    override fun onNullBinding(name: ComponentName) {
+     Log.i("WatchBridgeSamsung", "$label null binding")
+     samsungServicesInfo += "\\n$label null binding"
+     refresh()
+    }
+    override fun onBindingDied(name: ComponentName) {
+     Log.i("WatchBridgeSamsung", "$label binding died")
+     samsungServicesInfo += "\\n$label binding died"
+     refresh()
+    }
+   }
+   try {
+    val intent = Intent().setComponent(ComponentName("com.samsung.android.service.health", fullClass))
+    val bound = bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    Log.i("WatchBridgeSamsung", "$label bindService=$bound")
+    samsungServicesInfo += "\\n$label bindService=$bound"
+    if (bound) samsungConnections.add(connection)
+   } catch (e: Exception) {
+    val msg = "$label ${e.javaClass.simpleName}: ${e.message}"
+    Log.e("WatchBridgeSamsung", msg, e)
+    samsungServicesInfo += "\\n" + msg
+   }
+  }
+  refresh()
+ }
+
  private fun checkProvider() {
   val authority = "com.samsung.android.wear.shealth.healthdataprovider"
   val info = packageManager.resolveContentProvider(authority, 0)
@@ -365,7 +422,7 @@ class MainActivity : Activity(), SensorEventListener {
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "Health Connect:\n$healthConnectInfo\n\nNo data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
@@ -381,6 +438,11 @@ class MainActivity : Activity(), SensorEventListener {
  }
 
  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+ override fun onDestroy() {
+  for (connection in samsungConnections) try { unbindService(connection) } catch (_: Exception) {}
+  samsungConnections.clear()
+  super.onDestroy()
+ }
  override fun onPause() {
   super.onPause()
   manager.unregisterListener(this)
