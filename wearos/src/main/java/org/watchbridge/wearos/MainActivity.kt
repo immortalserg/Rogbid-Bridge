@@ -184,8 +184,7 @@ class MainActivity : Activity(), SensorEventListener {
     details.add("${sensor.name}: ${if (registered) "listening" else "registration failed"}")
    }
   }
-  sensorInfo = details.joinToString("
-")
+  sensorInfo = details.joinToString("\n")
   refresh()
  }
 
@@ -205,8 +204,7 @@ class MainActivity : Activity(), SensorEventListener {
    } catch (e: Exception) {
     "root query: ${e.javaClass.simpleName}: ${e.message?.take(100)}"
    }
-   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted
-$queryResult"
+   providerInfo = "exported=${info.exported}, readPermission=${info.readPermission}, granted=$granted\n$queryResult"
   }
   refresh()
  }
@@ -214,21 +212,11 @@ $queryResult"
  private fun refresh() {
   if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = steps?.toInt()?.toString() ?: "—" }
   if (screen != "diagnostics" || !::output.isInitialized) return
-  output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}
-" +
-   "Heart rate: ${heart?.toString() ?: "waiting"} bpm
-" +
-   "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)
-
-" +
-   "Sensors:
-$sensorInfo
-
-Samsung provider:
-$providerInfo
-
-" +
-   "No data sent to MQTT."
+  output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
+     "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
+     "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
+     "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
+     "No data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
