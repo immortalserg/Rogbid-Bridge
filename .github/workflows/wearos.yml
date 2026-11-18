@@ -42,9 +42,54 @@ jobs:
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
       - name: Build Wear OS debug APK
+        if: github.event_name == 'pull_request'
         run: gradle :wearos:assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
+      - name: Upload diagnostic APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
           name: watch-bridge-wearos-debug
           path: wearos/build/outputs/apk/debug/wearos-debug.apk
           if-no-files-found: error
+      - name: Validate release signing secrets
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WATCH_BRIDGE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.WATCH_BRIDGE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WATCH_BRIDGE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WATCH_BRIDGE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing WATCH_BRIDGE_KEYSTORE_BASE64"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing WATCH_BRIDGE_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Missing WATCH_BRIDGE_KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing WATCH_BRIDGE_KEY_PASSWORD"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/watchbridge-release.jks"
+          chmod 600 "$RUNNER_TEMP/watchbridge-release.jks"
+          echo "WATCH_BRIDGE_KEYSTORE_PATH=$RUNNER_TEMP/watchbridge-release.jks" >> "$GITHUB_ENV"
+          echo "WATCH_BRIDGE_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+      - name: Build signed release APK
+        if: github.event_name != 'pull_request'
+        env:
+          WATCH_BRIDGE_KEYSTORE_PASSWORD: ${{ secrets.WATCH_BRIDGE_KEYSTORE_PASSWORD }}
+          WATCH_BRIDGE_KEY_ALIAS: ${{ secrets.WATCH_BRIDGE_KEY_ALIAS }}
+          WATCH_BRIDGE_KEY_PASSWORD: ${{ secrets.WATCH_BRIDGE_KEY_PASSWORD }}
+        run: gradle :wearos:assembleRelease --no-daemon
+      - name: Verify APK signature
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=wearos/build/outputs/apk/release/wearos-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+      - name: Upload signed release APK
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-bridge-wearos-signed
+          path: wearos/build/outputs/apk/release/wearos-release.apk
+          if-no-files-found: error
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/watchbridge-release.jks"
