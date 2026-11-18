@@ -220,7 +220,7 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onSensorChanged(event: SensorEvent) {
   if (event.values.isEmpty()) return
   when (event.sensor.type) {
-   Sensor.TYPE_HEART_RATE -> heart = event.values[0]
+   Sensor.TYPE_HEART_RATE -> {\n    val bpm = event.values[0]\n    if (bpm.isFinite() && bpm > 0f) heart = bpm\n   }
    Sensor.TYPE_STEP_COUNTER -> steps = event.values[0]
   }
   refresh()
