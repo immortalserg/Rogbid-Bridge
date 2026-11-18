@@ -179,7 +179,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Тест SpO₂ (60 сек)") {
    spo2Probe?.stop()
    spo2Probe = SamsungTrackerProbe(this) { message ->
-    runOnUiThread { samsungServicesInfo += "\\n" + message; refresh() }
+    runOnUiThread { samsungServicesInfo += "\n" + message; refresh() }
    }
    spo2Probe?.start()
   })
@@ -389,7 +389,7 @@ class MainActivity : Activity(), SensorEventListener {
      }
      val msg = "$label connected: $descriptor"
      Log.i("WatchBridgeSamsung", msg)
-     samsungServicesInfo += "\\n" + msg
+     samsungServicesInfo += "\n" + msg
      refresh()
      if (label == "Tracker" && descriptor == "com.samsung.android.service.health.tracking.IClientEventListener") {
       Thread {
@@ -412,7 +412,7 @@ class MainActivity : Activity(), SensorEventListener {
        }
        Log.i("WatchBridgeSamsung", result)
        runOnUiThread {
-        samsungServicesInfo += "\\n" + result
+        samsungServicesInfo += "\n" + result
         refresh()
        }
       }.start()
@@ -420,17 +420,17 @@ class MainActivity : Activity(), SensorEventListener {
     }
     override fun onServiceDisconnected(name: ComponentName) {
      Log.i("WatchBridgeSamsung", "$label disconnected")
-     samsungServicesInfo += "\\n$label disconnected"
+     samsungServicesInfo += "\n$label disconnected"
      refresh()
     }
     override fun onNullBinding(name: ComponentName) {
      Log.i("WatchBridgeSamsung", "$label null binding")
-     samsungServicesInfo += "\\n$label null binding"
+     samsungServicesInfo += "\n$label null binding"
      refresh()
     }
     override fun onBindingDied(name: ComponentName) {
      Log.i("WatchBridgeSamsung", "$label binding died")
-     samsungServicesInfo += "\\n$label binding died"
+     samsungServicesInfo += "\n$label binding died"
      refresh()
     }
    }
@@ -438,12 +438,12 @@ class MainActivity : Activity(), SensorEventListener {
     val intent = Intent().setComponent(ComponentName("com.samsung.android.service.health", fullClass))
     val bound = bindService(intent, connection, Context.BIND_AUTO_CREATE)
     Log.i("WatchBridgeSamsung", "$label bindService=$bound")
-    samsungServicesInfo += "\\n$label bindService=$bound"
+    samsungServicesInfo += "\n$label bindService=$bound"
     if (bound) samsungConnections.add(connection)
    } catch (e: Exception) {
     val msg = "$label ${e.javaClass.simpleName}: ${e.message}"
     Log.e("WatchBridgeSamsung", msg, e)
-    samsungServicesInfo += "\\n" + msg
+    samsungServicesInfo += "\n" + msg
    }
   }
   refresh()
