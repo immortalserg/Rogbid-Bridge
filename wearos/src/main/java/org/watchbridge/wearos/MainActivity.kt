@@ -16,6 +16,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.content.Context
+import android.util.Log
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -250,9 +252,21 @@ class MainActivity : Activity(), SensorEventListener {
    refresh()
    return
   }
-  val hc = getSystemService(HealthConnectManager::class.java)
+  val hcByClass = try { getSystemService(HealthConnectManager::class.java) } catch (e: Exception) {
+   Log.e("WatchBridgeHC", "HealthConnectManager class lookup failed", e)
+   null
+  }
+  val hcByName = try { getSystemService(Context.HEALTHCONNECT_SERVICE) } catch (e: Exception) {
+   Log.e("WatchBridgeHC", "Health Connect name lookup failed", e)
+   null
+  }
+  Log.i("WatchBridgeHC", "API=${Build.VERSION.SDK_INT}, class=${hcByClass?.javaClass?.name ?: "null"}, name=${hcByName?.javaClass?.name ?: "null"}")
+  val hc = hcByClass ?: (hcByName as? HealthConnectManager)
   if (hc == null) {
-   healthConnectInfo = "HealthConnectManager unavailable"
+   healthConnectInfo = "Health Connect service unavailable\\n" +
+    "API: ${Build.VERSION.SDK_INT}\\n" +
+    "By class: ${hcByClass?.javaClass?.name ?: "null"}\\n" +
+    "By name: ${hcByName?.javaClass?.name ?: "null"}"
    refresh()
    return
   }
