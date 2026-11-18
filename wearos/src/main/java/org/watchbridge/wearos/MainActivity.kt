@@ -210,6 +210,79 @@ class MainActivity : Activity(), SensorEventListener {
   refresh()
  }
 
+ private fun checkHealthConnect() {
+  if (Build.VERSION.SDK_INT < 34) {
+   healthConnectInfo = "Health Connect requires API 34+"
+   refresh()
+   return
+  }
+  val missing = healthPermissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+  if (missing.isNotEmpty()) {
+   healthConnectInfo = "Missing permissions: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+   refresh()
+   requestPermissions(missing.toTypedArray(), 101)
+   return
+  }
+  val hc = getSystemService(HealthConnectManager::class.java)
+  if (hc == null) {
+   healthConnectInfo = "HealthConnectManager unavailable"
+   refresh()
+   return
+  }
+  healthConnectInfo = "Reading last 7 days..."
+  refresh()
+  val from = Instant.now().minus(7, ChronoUnit.DAYS)
+  val to = Instant.now()
+  readHealthRecords(hc, SleepSessionRecord::class.java, from, to, "Sleep") { records ->
+   records.take(3).joinToString(" | ") { r ->
+    "${r.startTime}–${r.endTime} stages=${r.stages.size} origin=${r.metadata.dataOrigin.packageName}"
+   }
+  }
+  readHealthRecords(hc, HeartRateRecord::class.java, from, to, "Heart rate") { records ->
+   records.take(3).joinToString(" | ") { r ->
+    "samples=${r.samples.size} origin=${r.metadata.dataOrigin.packageName}"
+   }
+  }
+  readHealthRecords(hc, StepsRecord::class.java, from, to, "Steps") { records ->
+   records.take(3).joinToString(" | ") { r ->
+    "count=${r.count} origin=${r.metadata.dataOrigin.packageName}"
+   }
+  }
+  readHealthRecords(hc, OxygenSaturationRecord::class.java, from, to, "SpO2") { records ->
+   records.take(3).joinToString(" | ") { r ->
+    "value=${r.percentage.value} origin=${r.metadata.dataOrigin.packageName}"
+   }
+  }
+ }
+
+ private fun <T : Record> readHealthRecords(
+  hc: HealthConnectManager, clazz: Class<T>, from: Instant, to: Instant,
+  title: String, describe: (List<T>) -> String
+ ) {
+  try {
+   val request = ReadRecordsRequest.Builder(clazz)
+    .setTimeRangeFilter(TimeRangeFilter.between(from, to))
+    .setPageSize(100)
+    .build()
+   hc.readRecords(request, mainExecutor, object : OutcomeReceiver<ReadRecordsResponse<T>, HealthConnectException> {
+    override fun onResult(result: ReadRecordsResponse<T>) {
+     val rows = result.records
+     val preview = if (rows.isEmpty()) "No records" else describe(rows)
+     healthConnectInfo += "\\n$title: ${rows.size} records; $preview" +
+      if (result.nextPageToken != null) " (more pages)" else ""
+     refresh()
+    }
+    override fun onError(error: HealthConnectException) {
+     healthConnectInfo += "\\n$title: ${error.javaClass.simpleName}: ${error.message}"
+     refresh()
+    }
+   })
+  } catch (e: Exception) {
+   healthConnectInfo += "\\n$title: ${e.javaClass.simpleName}: ${e.message}"
+   refresh()
+  }
+ }
+
  private fun checkProvider() {
   val authority = "com.samsung.android.wear.shealth.healthdataprovider"
   val info = packageManager.resolveContentProvider(authority, 0)
