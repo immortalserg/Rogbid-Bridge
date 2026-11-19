@@ -99,7 +99,7 @@ class MainActivity : Activity(), SensorEventListener {
  private fun showHome() {
   screen = "home"; heartValue = null; stepsValue = null
   val root = page()
-  root.addView(label("Watch Bridge", 16f).apply { typeface = Typeface.DEFAULT_BOLD })
+  root.addView(label("Watch Bridge", 13f).apply { typeface = Typeface.DEFAULT_BOLD })
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
   actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
@@ -115,7 +115,7 @@ class MainActivity : Activity(), SensorEventListener {
    row.addView(cell, LinearLayout.LayoutParams(0, dp(76), 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
   }
   root.addView(first); root.addView(second)
-  root.addView(button("Настройки приложения") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
+  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
   showPage(root)
  }
  private fun showJournal(kind: String) {
@@ -132,7 +132,16 @@ class MainActivity : Activity(), SensorEventListener {
  private fun showSettings() {
   screen = "settings"
   val root = page()
-  root.addView(label("Настройки", 19f))
+  root.addView(label("Настройки", 17f))
+  root.addView(button("Настройки приложения") { showAppSettings() })
+  root.addView(button("Диагностика датчиков") { showDiagnostics() })
+  root.addView(button("Назад") { showHome() })
+  showPage(root)
+ }
+ private fun showAppSettings() {
+  screen = "app_settings"
+  val root = page()
+  root.addView(label("Настройки приложения", 16f))
   root.addView(label("Тема оформления", 13f))
   val themeKeys = listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   val themeNames = themeKeys.map { themeTitle(it) }
@@ -145,7 +154,7 @@ class MainActivity : Activity(), SensorEventListener {
      val selected = themeKeys[position]
      if (prefs.getString("skin", "dark") != selected) {
       prefs.edit().putString("skin", selected).apply()
-      showSettings()
+      showAppSettings()
      }
     }
    }
@@ -153,9 +162,8 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(selector, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
    setMargins(dp(5), dp(4), dp(5), dp(8))
   })
-  root.addView(button("Диагностика датчиков") { showDiagnostics() })
   root.addView(label("MQTT: пока не подключён", 12f))
-  root.addView(button("Назад") { showHome() })
+  root.addView(button("Назад") { showSettings() })
   showPage(root)
  }
  private fun themeTitle(name: String): String = when (name) {
@@ -273,7 +281,7 @@ class MainActivity : Activity(), SensorEventListener {
   samsungTrackerTestResult = "$tracker: ожидание данных…"
   refresh()
   var samples = 0
-  spo2Probe = SamsungTrackerProbe(this, { message ->
+  spo2Probe = SamsungTrackerProbe(this, tracker) { message ->
    runOnUiThread {
     if (message.startsWith("$tracker sample received")) {
      samples++
@@ -285,7 +293,7 @@ class MainActivity : Activity(), SensorEventListener {
     }
     refresh()
    }
-  }, tracker)
+  }
   spo2Probe?.start()
  }
  private fun publishSpO2FromProbe(message: String): String? {
