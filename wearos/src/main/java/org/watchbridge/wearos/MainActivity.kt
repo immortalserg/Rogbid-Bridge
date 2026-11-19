@@ -204,6 +204,11 @@ class MainActivity : Activity(), SensorEventListener {
    spo2Probe?.start()
   })
   root.addView(button("Остановить SpO₂") { spo2Probe?.stop() })
+  root.addView(label("Samsung Tracker: тест других датчиков", 13f))
+  for (tracker in listOf("HEART_RATE", "ECG", "BIA")) {
+   root.addView(button("Тест $tracker") { startSamsungTrackerTest(tracker) })
+  }
+  root.addView(label("Диагностика: сырые значения ECG/BIA не интерпретируются.", 11f))
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
   root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
   root.addView(button("Датчики") { startSensors() })
@@ -220,6 +225,7 @@ class MainActivity : Activity(), SensorEventListener {
  private var healthConnectInfo = "Not checked"
  private var spo2Probe: SamsungTrackerProbe? = null
  private var spo2Result = "—"
+ private var samsungTrackerTestResult = "Не запускался"
  private var bleServer: WatchBleServer? = null
  private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
@@ -261,6 +267,26 @@ class MainActivity : Activity(), SensorEventListener {
    runOnUiThread { bleInfo = msg; refresh() }
   }
   bleServer?.start()
+ }
+ private fun startSamsungTrackerTest(tracker: String) {
+  spo2Probe?.stop()
+  samsungTrackerTestResult = "$tracker: ожидание данных…"
+  refresh()
+  var samples = 0
+  spo2Probe = SamsungTrackerProbe(this, { message ->
+   runOnUiThread {
+    if (message.startsWith("$tracker status=")) {
+     samples++
+     // Only report the existence of data; vendor-specific ECG/BIA fields are not decoded.
+     samsungTrackerTestResult = "$tracker: получено событий $samples"
+    } else if (message.contains("failed") || message.contains("error") ||
+               message.contains("timeout") || message.contains("bindService returned false")) {
+     samsungTrackerTestResult = "$tracker: " + message.take(120)
+    }
+    refresh()
+   }
+  }, tracker)
+  spo2Probe?.start()
  }
  private fun publishSpO2FromProbe(message: String): String? {
   val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return null
@@ -357,7 +383,7 @@ class MainActivity : Activity(), SensorEventListener {
   Log.i("WatchBridgeHC", "API=${Build.VERSION.SDK_INT}, class=${hcByClass?.javaClass?.name ?: "null"}, name=${hcByName?.javaClass?.name ?: "null"}")
   val hc = hcByClass ?: (hcByName as? HealthConnectManager)
   if (hc == null) {
-   healthConnectInfo = "Health Connect service unavailable\\n" +
+   healthConnectInfo = "Health Connect service unavailable\n" +
     "API: ${Build.VERSION.SDK_INT}\\n" +
     "By class: ${hcByClass?.javaClass?.name ?: "null"}\\n" +
     "By name: ${hcByName?.javaClass?.name ?: "null"}"
@@ -535,7 +561,7 @@ class MainActivity : Activity(), SensorEventListener {
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSpO₂:\n$spo2Result\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSpO₂:\n$spo2Result\n\nSamsung tracker test:\n$samsungTrackerTestResult\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
