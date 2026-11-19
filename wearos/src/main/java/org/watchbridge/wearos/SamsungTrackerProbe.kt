@@ -10,7 +10,7 @@ import android.os.Parcel
 import android.util.Log
 import com.samsung.android.service.health.tracking.data.ServiceDataPoint
 
-/** Experimental, read-only, one-shot Samsung Health Platform SpO2 probe. */
+/** Experimental, read-only Samsung Health Platform sensor probe. */
 class SamsungTrackerProbe(
  private val context: Context,
  private val trackerType: String = "SPO2",
@@ -21,6 +21,8 @@ class SamsungTrackerProbe(
  private val appId = context.packageName
  @Volatile private var remote: IBinder? = null
  @Volatile private var active = false
+ private var sampleCount = 0L
+ private var lastSampleReportMs = 0L
  private var connection: ServiceConnection? = null
  private val callback = object : Binder() {
   init { attachInterface(null, callbackDescriptor) }
@@ -38,13 +40,37 @@ class SamsungTrackerProbe(
       points.forEach { point ->
        if (!active) return@forEach
        if (trackerType != "SPO2") {
-        val fields = point.serviceValue
-        // ServiceValue.toString() only prints its class name; show indexed values.
-        // These integers are diagnostic, not interpreted medical measurements.
-        val preview = fields.take(12).mapIndexed { index, value ->
-         "$index=${value.integerValue}"
-        }.joinToString(", ")
-        report("$trackerType sample received t=${point.timeStamp} n=${fields.size} [$preview]")
+        val v = point.serviceValue
+        sampleCount++
+        val message = when (trackerType) {
+         "ECG" -> if (v.size >= 6) {
+          "ECG samples=$sampleCount t=${point.timeStamp} " +
+           "ecgMv=${v[0].floatValue} ppgGreen=${v[1].integerValue} " +
+           "leadOff=${v[2].integerValue} sequence=${v[3].integerValue} " +
+           "maxThresholdMv=${v[4].floatValue} minThresholdMv=${v[5].floatValue}"
+         } else "ECG unexpected field count=${v.size}"
+         "BIA" -> if (v.size >= 12) {
+          "BIA samples=$sampleCount t=${point.timeStamp} " +
+           "status=${v[0].integerValue} fatRatio=${v[1].floatValue} " +
+           "fatMass=${v[2].floatValue} bodyWater=${v[3].floatValue} " +
+           "muscleRatio=${v[4].floatValue} muscleMass=${v[5].floatValue} " +
+           "bmr=${v[6].floatValue} fatFreeRatio=${v[7].floatValue} " +
+           "fatFreeMass=${v[8].floatValue} progress=${v[9].floatValue} " +
+           "impedanceMagnitude=${v[10].floatValue} impedanceDegree=${v[11].floatValue}"
+         } else "BIA unexpected field count=${v.size}"
+         else -> {
+          val preview = v.take(12).mapIndexed { index, value ->
+           "$index=${value.integerValue}"
+          }.joinToString(", ")
+          "$trackerType samples=$sampleCount t=${point.timeStamp} n=${v.size} [$preview]"
+         }
+        }
+        // Avoid flooding the watch UI with high-rate ECG callbacks.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (sampleCount <= 3 || now - lastSampleReportMs >= 1000L) {
+         lastSampleReportMs = now
+         emit(message)
+        }
         return@forEach
        }
        val v = point.serviceValue
@@ -92,6 +118,8 @@ class SamsungTrackerProbe(
  @Synchronized fun start() {
   if (active) { emit("SpO2 probe already running"); return }
   active = true
+  sampleCount = 0L
+  lastSampleReportMs = 0L
   val conn = object : ServiceConnection {
    override fun onServiceConnected(name: ComponentName, binder: IBinder) {
     if (!active) return
