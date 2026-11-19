@@ -146,7 +146,27 @@ class MainActivity : Activity(), SensorEventListener {
   val themeKeys = listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
   val themeNames = themeKeys.map { themeTitle(it) }
   val selector = Spinner(this).apply {
-   adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, themeNames)
+   val palette = skin()
+   adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, themeNames) {
+    override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+     return (super.getView(position, convertView, parent) as TextView).apply {
+      setTextColor(palette.fg)
+      setBackgroundColor(palette.tile)
+      textSize = 13f
+      setPadding(dp(10), dp(8), dp(8), dp(8))
+     }
+    }
+    override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+     return (super.getDropDownView(position, convertView, parent) as TextView).apply {
+      setTextColor(palette.fg)
+      setBackgroundColor(palette.tile)
+      textSize = 13f
+      setPadding(dp(10), dp(10), dp(8), dp(10))
+     }
+    }
+   }
+   popupBackgroundDrawable = GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() }
+   background = GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() }
    setSelection(themeKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
    onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
     override fun onNothingSelected(parent: AdapterView<*>?) {}
