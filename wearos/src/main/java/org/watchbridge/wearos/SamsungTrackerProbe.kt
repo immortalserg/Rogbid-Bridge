@@ -39,10 +39,12 @@ class SamsungTrackerProbe(
        if (!active) return@forEach
        if (trackerType != "SPO2") {
         val fields = point.serviceValue
+        // ServiceValue.toString() only prints its class name; show indexed values.
+        // These integers are diagnostic, not interpreted medical measurements.
         val preview = fields.take(12).mapIndexed { index, value ->
-         "$index:{type=${value.javaClass.simpleName},int=${value.integerValue},raw=${value.toString().take(60)}}"
-        }.joinToString(" ")
-        report("$trackerType sample received timestamp=${point.timeStamp} fields=${fields.size} preview=$preview")
+         "$index=${value.integerValue}"
+        }.joinToString(", ")
+        report("$trackerType sample received t=${point.timeStamp} n=${fields.size} [$preview]")
         return@forEach
        }
        val v = point.serviceValue
