@@ -36,8 +36,9 @@ class SamsungTrackerProbe(
      1 -> {
       val points = data.createTypedArrayList(ServiceDataPoint.CREATOR).orEmpty()
       points.forEach { point ->
+       if (!active) return@forEach
        if (trackerType != "SPO2") {
-        emit("$trackerType sample received timestamp=${point.timeStamp} fields=${point.serviceValue.size}")
+        report("$trackerType sample received timestamp=${point.timeStamp} fields=${point.serviceValue.size}")
         return@forEach
        }
        val v = point.serviceValue
@@ -87,10 +88,12 @@ class SamsungTrackerProbe(
   active = true
   val conn = object : ServiceConnection {
    override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+    if (!active) return
     remote = binder
     Thread {
      try {
-      emit("SpO2: creating tracker")
+      if (!active) return@Thread
+      emit("$trackerType: creating tracker")
       transact(binder, 1) {
        it.writeString(appId)
        it.writeString(trackerType)
@@ -101,13 +104,15 @@ class SamsungTrackerProbe(
        it.writeInt(-1) // age
        it.writeString(null) // exerciseType
       }
-      emit("SpO2: registering listener")
+      if (!active) return@Thread
+      emit("$trackerType: registering listener")
       transact(binder, 2) {
        it.writeString(appId)
        it.writeString(trackerType)
        it.writeStrongBinder(callback)
       }
-      emit("SpO2: waiting for measurements (60 seconds maximum)")
+      if (!active) { stop(); return@Thread }
+      emit("$trackerType: waiting for measurements (60 seconds maximum)")
      } catch (e: Exception) {
       emit("SpO2 start failed: ${e.javaClass.simpleName}: ${e.message}")
       stop()
