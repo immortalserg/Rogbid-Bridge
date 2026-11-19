@@ -36,6 +36,10 @@ class SamsungTrackerProbe(
      1 -> {
       val points = data.createTypedArrayList(ServiceDataPoint.CREATOR).orEmpty()
       points.forEach { point ->
+       if (trackerType != "SPO2") {
+        emit("$trackerType sample received timestamp=${point.timeStamp} fields=${point.serviceValue.size}")
+        return@forEach
+       }
        val v = point.serviceValue
        if (v.size >= 4) {
         val status = v[0].integerValue
