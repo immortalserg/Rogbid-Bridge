@@ -1,7 +1,7 @@
 name: Wear OS APK
 on:
   push:
-    branches: [main]
+    branches: [main, feature/wearos-ble-spo2]
     paths:
       - 'wearos/**'
       - 'shared/**'
