@@ -513,7 +513,7 @@ class MainActivity : Activity(), SensorEventListener {
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "Health Connect:\n$healthConnectInfo\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
@@ -531,6 +531,7 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
  override fun onDestroy() {
   spo2Probe?.stop()
+  bleServer?.stop()
   for (connection in samsungConnections) try { unbindService(connection) } catch (_: Exception) {}
   samsungConnections.clear()
   super.onDestroy()
