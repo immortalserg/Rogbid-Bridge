@@ -183,14 +183,14 @@ class MainActivity : Activity(), SensorEventListener {
   val root = page()
   root.addView(label("Диагностика", 19f))
   output = label("", 12f).apply { gravity = Gravity.START }
-  root.addView(output)
+  root.addView(button("Остановить тест датчика") { stopSamsungTrackerTest() })
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Samsung services") { checkSamsungServices() })
   root.addView(button("BLE GATT: запустить") { startBle() })
   root.addView(button("BLE GATT: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
   root.addView(button("Тест SpO₂ (60 сек)") {
-   spo2Probe?.stop()
+   stopSamsungTrackerTest()
    spo2Result = "Измерение SpO₂…"
    refresh()
    spo2Probe = SamsungTrackerProbe(this) { message ->
@@ -211,7 +211,7 @@ class MainActivity : Activity(), SensorEventListener {
    }
    spo2Probe?.start()
   })
-  root.addView(button("Остановить SpO₂") { spo2Probe?.stop() })
+  root.addView(button("Остановить SpO₂") { spo2Probe?.stop(); spo2Probe = null; spo2Result = "Измерение остановлено"; refresh() })
   root.addView(label("Samsung Tracker: тест других датчиков", 13f))
   for (tracker in listOf("HEART_RATE", "ECG", "BIA")) {
    root.addView(button("Тест $tracker") { startSamsungTrackerTest(tracker) })
@@ -220,7 +220,8 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
   root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
   root.addView(button("Датчики") { startSensors() })
-  root.addView(button("Назад") { showSettings() })
+  root.addView(button("Назад") { stopSamsungTrackerTest(); showSettings() })
+  root.addView(output)
   showPage(root); refresh()
  }
 
@@ -234,6 +235,10 @@ class MainActivity : Activity(), SensorEventListener {
  private var spo2Probe: SamsungTrackerProbe? = null
  private var spo2Result = "—"
  private var samsungTrackerTestResult = "Не запускался"
+ private var activeTrackerName: String? = null
+ private var trackerTestGeneration = 0
+ private var trackerSampleCount = 0
+ private var trackerLastUiUpdate = 0L
  private var bleServer: WatchBleServer? = null
  private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
@@ -276,25 +281,56 @@ class MainActivity : Activity(), SensorEventListener {
   }
   bleServer?.start()
  }
- private fun startSamsungTrackerTest(tracker: String) {
+ private fun stopSamsungTrackerTest() {
+  trackerTestGeneration++
+  val previous = activeTrackerName
+  activeTrackerName = null
   spo2Probe?.stop()
+  spo2Probe = null
+  if (previous != null) {
+   samsungTrackerTestResult = "$previous: остановлено, событий $trackerSampleCount"
+  }
+  refresh()
+ }
+ private fun startSamsungTrackerTest(tracker: String) {
+  stopSamsungTrackerTest()
+  activeTrackerName = tracker
+  trackerSampleCount = 0
+  trackerLastUiUpdate = 0L
   samsungTrackerTestResult = "$tracker: ожидание данных…"
   refresh()
-  var samples = 0
-  spo2Probe = SamsungTrackerProbe(this, tracker) { message ->
-   runOnUiThread {
+  val generation = trackerTestGeneration
+  val probe = SamsungTrackerProbe(this, tracker) { message ->
+   // Binder callbacks may arrive much faster than the watch screen can redraw.
+   if (generation == trackerTestGeneration && activeTrackerName == tracker) {
     if (message.startsWith("$tracker sample received")) {
-     samples++
-     // Only report the existence of data; vendor-specific ECG/BIA fields are not decoded.
-     samsungTrackerTestResult = "$tracker: получено событий $samples"
-    } else if (message.contains("failed") || message.contains("error") ||
-               message.contains("timeout") || message.contains("bindService returned false")) {
-     samsungTrackerTestResult = "$tracker: " + message.take(120)
+     trackerSampleCount++
+     val now = android.os.SystemClock.elapsedRealtime()
+     if (now - trackerLastUiUpdate >= 1000L) {
+      trackerLastUiUpdate = now
+      val count = trackerSampleCount
+      runOnUiThread {
+       if (generation == trackerTestGeneration) {
+        samsungTrackerTestResult = "$tracker: получено событий $count"
+        refresh()
+       }
+      }
+     }
+    } else if (message.contains("failed", ignoreCase = true) ||
+               message.contains("error", ignoreCase = true) ||
+               message.contains("timeout", ignoreCase = true) ||
+               message.contains("bindService returned false")) {
+     runOnUiThread {
+      if (generation == trackerTestGeneration) {
+       samsungTrackerTestResult = "$tracker: " + message.take(120)
+       refresh()
+      }
+     }
     }
-    refresh()
    }
   }
-  spo2Probe?.start()
+  spo2Probe = probe
+  probe.start()
  }
  private fun publishSpO2FromProbe(message: String): String? {
   val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return null
