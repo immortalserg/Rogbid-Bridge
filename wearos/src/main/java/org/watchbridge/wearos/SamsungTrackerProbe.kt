@@ -38,7 +38,11 @@ class SamsungTrackerProbe(
       points.forEach { point ->
        if (!active) return@forEach
        if (trackerType != "SPO2") {
-        report("$trackerType sample received timestamp=${point.timeStamp} fields=${point.serviceValue.size}")
+        val fields = point.serviceValue
+        val preview = fields.take(12).mapIndexed { index, value ->
+         "$index:{type=${value.javaClass.simpleName},int=${value.integerValue},raw=${value.toString().take(60)}}"
+        }.joinToString(" ")
+        report("$trackerType sample received timestamp=${point.timeStamp} fields=${fields.size} preview=$preview")
         return@forEach
        }
        val v = point.serviceValue
