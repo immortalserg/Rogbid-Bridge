@@ -183,8 +183,23 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("BLE GATT: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
   root.addView(button("Тест SpO₂ (60 сек)") {
    spo2Probe?.stop()
+   spo2Result = "Измерение SpO₂…"
+   refresh()
    spo2Probe = SamsungTrackerProbe(this) { message ->
-    runOnUiThread { samsungServicesInfo += "\n" + message; publishSpO2FromProbe(message); refresh() }
+    runOnUiThread {
+     // Keep noisy Samsung tracker progress in logcat, not on the small watch display.
+     val result = publishSpO2FromProbe(message)
+     if (result != null) {
+      spo2Result = result
+      refresh()
+     } else if (message.startsWith("Samsung tracker error") ||
+                message.startsWith("SpO2 start failed") ||
+                message.startsWith("SpO2 binding failed") ||
+                message.startsWith("SpO2: 60-second timeout")) {
+      spo2Result = "Измерение не удалось"
+      refresh()
+     }
+    }
    }
    spo2Probe?.start()
   })
@@ -204,6 +219,7 @@ class MainActivity : Activity(), SensorEventListener {
  private val samsungConnections = mutableListOf<ServiceConnection>()
  private var healthConnectInfo = "Not checked"
  private var spo2Probe: SamsungTrackerProbe? = null
+ private var spo2Result = "—"
  private var bleServer: WatchBleServer? = null
  private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
@@ -246,12 +262,15 @@ class MainActivity : Activity(), SensorEventListener {
   }
   bleServer?.start()
  }
- private fun publishSpO2FromProbe(message: String) {
-  val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return
+ private fun publishSpO2FromProbe(message: String): String? {
+  val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return null
   val (status, oxygen, pulse, _, timestamp) = match.destructured
-  if (status == "2" || status == "3") {
-   bleServer?.publish(oxygen.toInt(), pulse.toInt(), timestamp.toLong())
-  }
+  val spo2 = oxygen.toIntOrNull() ?: return null
+  // Only status 2 with a real, non-zero oxygen reading is a valid result.
+  if (status != "2" || spo2 !in 1..100) return null
+  val bpm = pulse.toIntOrNull() ?: 0
+  bleServer?.publish(spo2, bpm, timestamp.toLong())
+  return "SpO₂: $spo2%  |  Пульс: $bpm"
  }
  private fun requestMissingPermissions() {
   val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
@@ -516,7 +535,7 @@ class MainActivity : Activity(), SensorEventListener {
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSpO₂:\n$spo2Result\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
