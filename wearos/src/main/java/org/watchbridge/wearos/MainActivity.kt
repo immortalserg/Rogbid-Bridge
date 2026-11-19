@@ -176,10 +176,12 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Samsung services") { checkSamsungServices() })
+  root.addView(button("BLE GATT: запустить") { startBle() })
+  root.addView(button("BLE GATT: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
   root.addView(button("Тест SpO₂ (60 сек)") {
    spo2Probe?.stop()
    spo2Probe = SamsungTrackerProbe(this) { message ->
-    runOnUiThread { samsungServicesInfo += "\n" + message; refresh() }
+    runOnUiThread { samsungServicesInfo += "\n" + message; publishSpO2FromProbe(message); refresh() }
    }
    spo2Probe?.start()
   })
@@ -199,6 +201,8 @@ class MainActivity : Activity(), SensorEventListener {
  private val samsungConnections = mutableListOf<ServiceConnection>()
  private var healthConnectInfo = "Not checked"
  private var spo2Probe: SamsungTrackerProbe? = null
+ private var bleServer: WatchBleServer? = null
+ private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
   Manifest.permission.ACTIVITY_RECOGNITION,
   "android.permission.health.READ_HEART_RATE"
@@ -223,6 +227,29 @@ class MainActivity : Activity(), SensorEventListener {
   refresh()
  }
 
+ private fun startBle() {
+  if (Build.VERSION.SDK_INT >= 31) {
+   val needed = listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE)
+    .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+   if (needed.isNotEmpty()) {
+    bleInfo = "Grant Bluetooth permissions and tap BLE GATT again"
+    requestPermissions(needed.toTypedArray(), 102)
+    refresh()
+    return
+   }
+  }
+  if (bleServer == null) bleServer = WatchBleServer(this) { msg ->
+   runOnUiThread { bleInfo = msg; refresh() }
+  }
+  bleServer?.start()
+ }
+ private fun publishSpO2FromProbe(message: String) {
+  val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return
+  val (status, oxygen, pulse, _, timestamp) = match.destructured
+  if (status == "2" || status == "3") {
+   bleServer?.publish(oxygen.toInt(), pulse.toInt(), timestamp.toLong())
+  }
+ }
  private fun requestMissingPermissions() {
   val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
   if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 100)
