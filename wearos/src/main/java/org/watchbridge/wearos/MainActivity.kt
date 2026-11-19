@@ -34,6 +34,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Spinner
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -96,7 +99,7 @@ class MainActivity : Activity(), SensorEventListener {
  private fun showHome() {
   screen = "home"; heartValue = null; stepsValue = null
   val root = page()
-  root.addView(label("Watch Bridge", 20f).apply { typeface = Typeface.DEFAULT_BOLD })
+  root.addView(label("Watch Bridge", 16f).apply { typeface = Typeface.DEFAULT_BOLD })
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
   actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
@@ -112,7 +115,7 @@ class MainActivity : Activity(), SensorEventListener {
    row.addView(cell, LinearLayout.LayoutParams(0, dp(76), 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
   }
   root.addView(first); root.addView(second)
-  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
+  root.addView(button("Настройки приложения") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
   showPage(root)
  }
  private fun showJournal(kind: String) {
@@ -130,9 +133,26 @@ class MainActivity : Activity(), SensorEventListener {
   screen = "settings"
   val root = page()
   root.addView(label("Настройки", 19f))
-  val currentTheme = prefs.getString("skin", "dark") ?: "dark"
-  root.addView(button("Тема оформления: ${themeTitle(currentTheme)}") { showThemeSelection() },
-   LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(6), dp(5), dp(6)) })
+  root.addView(label("Тема оформления", 13f))
+  val themeKeys = listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
+  val themeNames = themeKeys.map { themeTitle(it) }
+  val selector = Spinner(this).apply {
+   adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, themeNames)
+   setSelection(themeKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
+   onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+    override fun onNothingSelected(parent: AdapterView<*>?) {}
+    override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+     val selected = themeKeys[position]
+     if (prefs.getString("skin", "dark") != selected) {
+      prefs.edit().putString("skin", selected).apply()
+      showSettings()
+     }
+    }
+   }
+  }
+  root.addView(selector, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
+   setMargins(dp(5), dp(4), dp(5), dp(8))
+  })
   root.addView(button("Диагностика датчиков") { showDiagnostics() })
   root.addView(label("MQTT: пока не подключён", 12f))
   root.addView(button("Назад") { showHome() })
@@ -149,23 +169,6 @@ class MainActivity : Activity(), SensorEventListener {
   "cream" -> "Кремовая"
   "sky" -> "Небесная"
   else -> name
- }
- private fun showThemeSelection() {
-  screen = "themes"
-  val root = page()
-  root.addView(label("Тема оформления", 19f))
-  val selected = prefs.getString("skin", "dark") ?: "dark"
-  for (name in listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")) {
-   val prefix = if (name == selected) "✓  " else "○  "
-   root.addView(button(prefix + themeTitle(name)) {
-    prefs.edit().putString("skin", name).apply()
-    showSettings()
-   }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply {
-    setMargins(dp(5), dp(2), dp(5), dp(2))
-   })
-  }
-  root.addView(button("Назад") { showSettings() })
-  showPage(root)
  }
  private fun showDiagnostics() {
   screen = "diagnostics"
