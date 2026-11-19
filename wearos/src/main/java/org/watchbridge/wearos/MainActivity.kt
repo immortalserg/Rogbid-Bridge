@@ -258,6 +258,7 @@ class MainActivity : Activity(), SensorEventListener {
  private var activeTrackerName: String? = null
  private var trackerTestGeneration = 0
  private var trackerSampleCount = 0
+ private val trackerSamplePreviews = mutableListOf<String>()
  private var trackerLastUiUpdate = 0L
  private var bleServer: WatchBleServer? = null
  private var bleInfo = "BLE not started"
@@ -308,7 +309,8 @@ class MainActivity : Activity(), SensorEventListener {
   spo2Probe?.stop()
   spo2Probe = null
   if (previous != null) {
-   samsungTrackerTestResult = "$previous: остановлено, событий $trackerSampleCount"
+   samsungTrackerTestResult = "$previous: остановлено, событий $trackerSampleCount" +
+    if (trackerSamplePreviews.isNotEmpty()) "\\nПервые образцы:\\n" + trackerSamplePreviews.joinToString("\\n") else ""
   }
   refresh()
  }
@@ -316,6 +318,7 @@ class MainActivity : Activity(), SensorEventListener {
   stopSamsungTrackerTest()
   activeTrackerName = tracker
   trackerSampleCount = 0
+  trackerSamplePreviews.clear()
   trackerLastUiUpdate = 0L
   samsungTrackerTestResult = "$tracker: ожидание данных…"
   refresh()
@@ -325,13 +328,17 @@ class MainActivity : Activity(), SensorEventListener {
    if (generation == trackerTestGeneration && activeTrackerName == tracker) {
     if (message.startsWith("$tracker sample received")) {
      trackerSampleCount++
+     if (trackerSamplePreviews.size < 3) {
+      trackerSamplePreviews.add(message.take(420))
+     }
      val now = android.os.SystemClock.elapsedRealtime()
      if (now - trackerLastUiUpdate >= 1000L) {
       trackerLastUiUpdate = now
       val count = trackerSampleCount
       runOnUiThread {
        if (generation == trackerTestGeneration) {
-        samsungTrackerTestResult = "$tracker: получено событий $count"
+        samsungTrackerTestResult = "$tracker: получено событий $count" +
+         if (trackerSamplePreviews.isNotEmpty()) "\\nПервые образцы:\\n" + trackerSamplePreviews.joinToString("\\n") else ""
         refresh()
        }
       }
