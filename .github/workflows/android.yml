@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [main, feature/automatic-sleep-sync, feature/home-assistant-integration]
+    branches: [main, feature/automatic-sleep-sync, feature/home-assistant-integration, feature/wearos-ble-spo2]
   pull_request:
   workflow_dispatch:
 jobs:
