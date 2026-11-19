@@ -13,12 +13,12 @@ import com.samsung.android.service.health.tracking.data.ServiceDataPoint
 /** Experimental, read-only, one-shot Samsung Health Platform SpO2 probe. */
 class SamsungTrackerProbe(
  private val context: Context,
- private val report: (String) -> Unit
+ private val report: (String) -> Unit,
+ private val trackerType: String = "SPO2"
 ) {
  private val serviceDescriptor = "com.samsung.android.service.health.tracking.IClientEventListener"
  private val callbackDescriptor = "com.samsung.android.service.health.tracking.IServiceEventListener"
  private val appId = context.packageName
- private val trackerType = "SPO2"
  @Volatile private var remote: IBinder? = null
  @Volatile private var active = false
  private var connection: ServiceConnection? = null
@@ -42,8 +42,8 @@ class SamsungTrackerProbe(
         val spo2 = v[1].integerValue
         val pulse = v[2].integerValue
         val accuracy = v[3].integerValue
-        emit("SpO2 status=$status value=$spo2 pulse=$pulse accuracy=$accuracy timestamp=${point.timeStamp}")
-        if (status == 2 || status == 3 || status == -6) Thread { stop() }.start()
+        emit("$trackerType status=$status value=$spo2 pulse=$pulse accuracy=$accuracy timestamp=${point.timeStamp}")
+        if (trackerType == "SPO2" && (status == 2 || status == 3 || status == -6)) Thread { stop() }.start()
        } else emit("SpO2 point: unexpected values count=${v.size}")
       }
      }
