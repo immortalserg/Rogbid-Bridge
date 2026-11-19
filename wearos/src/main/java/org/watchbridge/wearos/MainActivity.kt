@@ -329,7 +329,7 @@ class MainActivity : Activity(), SensorEventListener {
     if (message.startsWith("$tracker sample received")) {
      trackerSampleCount++
      if (trackerSamplePreviews.size < 3) {
-      trackerSamplePreviews.add(message.take(420))
+      trackerSamplePreviews.add(message.take(220))
      }
      val now = android.os.SystemClock.elapsedRealtime()
      if (now - trackerLastUiUpdate >= 1000L) {
