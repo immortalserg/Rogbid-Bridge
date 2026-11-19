@@ -275,7 +275,7 @@ class MainActivity : Activity(), SensorEventListener {
   var samples = 0
   spo2Probe = SamsungTrackerProbe(this, { message ->
    runOnUiThread {
-    if (message.startsWith("$tracker status=")) {
+    if (message.startsWith("$tracker sample received")) {
      samples++
      // Only report the existence of data; vendor-specific ECG/BIA fields are not decoded.
      samsungTrackerTestResult = "$tracker: получено событий $samples"
