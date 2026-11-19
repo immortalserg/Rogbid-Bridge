@@ -310,7 +310,7 @@ class MainActivity : Activity(), SensorEventListener {
   spo2Probe = null
   if (previous != null) {
    samsungTrackerTestResult = "$previous: остановлено, событий $trackerSampleCount" +
-    if (trackerSamplePreviews.isNotEmpty()) "\\nПервые образцы:\\n" + trackerSamplePreviews.joinToString("\\n") else ""
+    if (trackerSamplePreviews.isNotEmpty()) "\nПервые образцы:\n" + trackerSamplePreviews.joinToString("\n") else ""
   }
   refresh()
  }
@@ -338,7 +338,7 @@ class MainActivity : Activity(), SensorEventListener {
       runOnUiThread {
        if (generation == trackerTestGeneration) {
         samsungTrackerTestResult = "$tracker: получено событий $count" +
-         if (trackerSamplePreviews.isNotEmpty()) "\\nПервые образцы:\\n" + trackerSamplePreviews.joinToString("\\n") else ""
+         if (trackerSamplePreviews.isNotEmpty()) "\nПервые образцы:\n" + trackerSamplePreviews.joinToString("\n") else ""
         refresh()
        }
       }
