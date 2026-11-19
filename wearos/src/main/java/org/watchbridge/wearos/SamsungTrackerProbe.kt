@@ -13,8 +13,8 @@ import com.samsung.android.service.health.tracking.data.ServiceDataPoint
 /** Experimental, read-only, one-shot Samsung Health Platform SpO2 probe. */
 class SamsungTrackerProbe(
  private val context: Context,
- private val report: (String) -> Unit,
- private val trackerType: String = "SPO2"
+ private val trackerType: String = "SPO2",
+ private val report: (String) -> Unit
 ) {
  private val serviceDescriptor = "com.samsung.android.service.health.tracking.IClientEventListener"
  private val callbackDescriptor = "com.samsung.android.service.health.tracking.IServiceEventListener"
