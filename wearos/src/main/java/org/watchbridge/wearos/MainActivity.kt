@@ -165,7 +165,7 @@ class MainActivity : Activity(), SensorEventListener {
      }
     }
    }
-   popupBackgroundDrawable = GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() }
+   setPopupBackgroundDrawable(GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() })
    background = GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() }
    setSelection(themeKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
    onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
