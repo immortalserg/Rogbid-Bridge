@@ -838,6 +838,12 @@ class MainActivity : Activity(), SensorEventListener {
      measurementPreview = result
      measurementProgress = 100
      stopOxygenBlink()
+    } else if (message.startsWith("SPO2 status=2") && result == null) {
+     measurementMessage = "Измерение завершено без достоверного результата"
+     measurementPreview = message.take(160)
+     spo2Result = measurementPreview
+     stopOxygenBlink()
+     if (screen == "home") homeOxygenButton?.text = "O₂  Нет данных"
     } else if (message.contains("error", true) || message.contains("failed", true) ||
                message.contains("timeout", true) || message.contains("status=3") ||
                message.contains("status=-6") || message.contains("tracker error code", true) ||
@@ -1032,7 +1038,7 @@ class MainActivity : Activity(), SensorEventListener {
   probe.start()
  }
  private fun publishSpO2FromProbe(message: String): String? {
-  val match = Regex("SpO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)").find(message) ?: return null
+  val match = Regex("SPO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)", RegexOption.IGNORE_CASE).find(message) ?: return null
   val (status, oxygen, pulse, _, timestamp) = match.destructured
   val spo2 = oxygen.toIntOrNull() ?: return null
   // Only status 2 with a real, non-zero oxygen reading is a valid result.
