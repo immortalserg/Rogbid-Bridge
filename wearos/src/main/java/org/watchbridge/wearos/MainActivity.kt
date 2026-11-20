@@ -344,8 +344,70 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(selector, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
    setMargins(dp(5), dp(4), dp(5), dp(8))
   })
-  root.addView(label("MQTT: пока не подключён", 12f))
+  root.addView(button("MQTT и Bluetooth") { showTransportSettings() })
+  root.addView(label(mqttInfo, 11f))
   root.addView(button("Назад") { showSettings() })
+  showPage(root)
+ }
+ private fun showTransportSettings() {
+  screen = "transport_settings"
+  val root = page()
+  root.addView(label("Передача данных", 15f))
+  fun field(title: String, key: String, fallback: String = "", password: Boolean = false): EditText {
+   root.addView(label(title, 11f))
+   val input = EditText(this).apply {
+    setText(prefs.getString(key, fallback).orEmpty())
+    setTextColor(skin().fg)
+    textSize = 12f
+    setSingleLine(true)
+    if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+   }
+   root.addView(input)
+   return input
+  }
+  val host = field("MQTT сервер (IP или DNS)", "mqtt_host")
+  val port = field("Порт (TLS: 8883, обычный: 1883)", "mqtt_port", "8883")
+  val user = field("Логин", "mqtt_user")
+  val pass = field("Пароль", "mqtt_password", password = true)
+  var enabled = prefs.getBoolean("mqtt_enabled", false)
+  var tls = prefs.getBoolean("mqtt_tls", true)
+  var ble = prefs.getBoolean("ble_enabled", false)
+  lateinit var mqttToggle: Button
+  mqttToggle = button("MQTT: " + if (enabled) "Вкл" else "Выкл") {
+   enabled = !enabled
+   mqttToggle.text = "MQTT: " + if (enabled) "Вкл" else "Выкл"
+  }
+  root.addView(mqttToggle)
+  lateinit var tlsToggle: Button
+  tlsToggle = button("TLS: " + if (tls) "Вкл" else "Выкл") {
+   tls = !tls
+   tlsToggle.text = "TLS: " + if (tls) "Вкл" else "Выкл"
+  }
+  root.addView(tlsToggle)
+  lateinit var bleToggle: Button
+  bleToggle = button("Bluetooth: " + if (ble) "Вкл" else "Выкл") {
+   ble = !ble
+   bleToggle.text = "Bluetooth: " + if (ble) "Вкл" else "Выкл"
+  }
+  root.addView(bleToggle)
+  root.addView(button("Сохранить") {
+   val p = port.text.toString().toIntOrNull()
+   if (p == null || p !in 1..65535) {
+    mqttInfo = "Неверный MQTT порт"
+   } else {
+    prefs.edit().putString("mqtt_host", host.text.toString().trim())
+     .putString("mqtt_port", p.toString())
+     .putString("mqtt_user", user.text.toString())
+     .putString("mqtt_password", pass.text.toString())
+     .putBoolean("mqtt_enabled", enabled)
+     .putBoolean("mqtt_tls", tls)
+     .putBoolean("ble_enabled", ble).apply()
+    if (ble) startBle() else { bleServer?.stop(); bleServer = null }
+    mqttInfo = "Настройки сохранены"
+   }
+   showAppSettings()
+  })
+  root.addView(button("Назад") { showAppSettings() })
   showPage(root)
  }
  private fun showBodySettings() {
@@ -936,6 +998,8 @@ class MainActivity : Activity(), SensorEventListener {
  private var trackerSampleCount = 0
  private val trackerSamplePreviews = mutableListOf<String>()
  private var trackerLastUiUpdate = 0L
+ private var mqtt: WatchMqtt? = null
+ private var mqttInfo = "MQTT выключен"
  private var bleServer: WatchBleServer? = null
  private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
@@ -957,6 +1021,8 @@ class MainActivity : Activity(), SensorEventListener {
    prefs.edit().putString("device_id", "wearos_" + UUID.randomUUID().toString().replace("-", "")).apply()
   }
   manager = getSystemService(SENSOR_SERVICE) as SensorManager
+  mqtt = WatchMqtt(this) { msg -> runOnUiThread { mqttInfo = msg; refresh() } }
+  if (prefs.getBoolean("ble_enabled", false)) startBle()
   showHome()
   requestMissingPermissions()
   refresh()
