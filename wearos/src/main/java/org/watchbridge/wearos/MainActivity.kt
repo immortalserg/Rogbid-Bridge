@@ -224,7 +224,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(actions)
   renderHeartButton()
   val indicators = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val stepsButton = button("♟  " + (steps?.toInt()?.toString() ?: "—")) { showJournal("steps") }
+  val stepsButton = button("♟  " + (todaySteps()?.toString() ?: "—")) { showJournal("steps") }
   val sleepButton = button("☾  —") { showJournal("sleep") }
   stepsValue = stepsButton
   indicators.addView(stepsButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
@@ -240,6 +240,26 @@ class MainActivity : Activity(), SensorEventListener {
  private fun startHomeOxygen() {
   startOxygenBlink()
   startSpO2Measurement()
+ }
+ private fun stepHistory(): JSONObject = try {
+  JSONObject(prefs.getString("step_daily_history", "{}") ?: "{}")
+ } catch (_: Exception) { JSONObject() }
+ private fun todaySteps(): Int? = stepHistory().optJSONObject(LocalDate.now().toString())?.optInt("steps")
+ private fun recordStepCounter(total: Float) {
+  if (!total.isFinite() || total < 0f) return
+  val day = LocalDate.now().toString()
+  val history = stepHistory()
+  val entry = history.optJSONObject(day) ?: JSONObject()
+  val current = total.toLong()
+  val previous = entry.optLong("lastCounter", -1L)
+  val increment = if (previous < 0L) 0L else if (current >= previous) current - previous else current
+  val updated = (entry.optLong("steps", 0L) + increment).coerceAtMost(Int.MAX_VALUE.toLong())
+  entry.put("steps", updated)
+  entry.put("lastCounter", current)
+  entry.put("lastUpdate", System.currentTimeMillis())
+  history.put(day, entry)
+  history.keys().asSequence().toList().sortedDescending().drop(90).forEach { history.remove(it) }
+  prefs.edit().putString("step_daily_history", history.toString()).apply()
  }
  private fun showJournal(kind: String) {
   stopHeartBlink()
@@ -257,6 +277,16 @@ class MainActivity : Activity(), SensorEventListener {
     val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(entry.optLong("time")))
     root.addView(label("$date   ${entry.optInt("value")} " + (if (kind == "heart") "уд/мин" else "%"), 12f))
    }
+  } else if (kind == "steps") {
+   root.addView(label("Шаги, зарегистрированные приложением по дням", 11f))
+   val history = stepHistory()
+   val days = history.keys().asSequence().toList().sortedDescending()
+   if (days.isEmpty()) root.addView(label("Данных пока нет", 12f))
+   days.forEach { day ->
+    val entry = history.optJSONObject(day) ?: return@forEach
+    root.addView(label("$day   ${entry.optInt("steps")} шагов", 12f))
+   }
+   root.addView(label("Учёт начинается с первого запуска. Для точного суточного итога нужна синхронизация с системной историей шагов.", 10f))
   } else root.addView(label("История пока не подключена", 12f))
   showPage(root)
  }
@@ -1303,7 +1333,7 @@ class MainActivity : Activity(), SensorEventListener {
  }
 
  private fun refresh() {
-  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = "♟  " + (steps?.toInt()?.toString() ?: "—") }
+  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = "♟  " + (todaySteps()?.toString() ?: "—") }
   if (screen != "system_diagnostics" || !::output.isInitialized) return
   output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
@@ -1326,7 +1356,10 @@ class MainActivity : Activity(), SensorEventListener {
      }
     }
    }
-   Sensor.TYPE_STEP_COUNTER -> steps = event.values[0]
+   Sensor.TYPE_STEP_COUNTER -> {
+    steps = event.values[0]
+    recordStepCounter(event.values[0])
+   }
   }
   refresh()
  }
