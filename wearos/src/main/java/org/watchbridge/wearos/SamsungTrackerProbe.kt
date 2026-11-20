@@ -69,7 +69,8 @@ class SamsungTrackerProbe(
         }
         // Avoid flooding the watch UI with high-rate ECG callbacks.
         val now = android.os.SystemClock.elapsedRealtime()
-        if (sampleCount <= 3 || now - lastSampleReportMs >= 1000L) {
+        if (sampleCount <= 3 || now - lastSampleReportMs >= 1000L ||
+            (trackerType == "BIA" && v.size >= 12 && v[0].integerValue == 0 && v[9].floatValue >= 1f)) {
          lastSampleReportMs = now
          emit(message)
         }
