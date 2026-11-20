@@ -48,6 +48,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.ProgressBar
+import android.widget.FrameLayout
 import android.widget.EditText
 import android.text.InputType
 import android.text.SpannableString
@@ -408,16 +409,30 @@ class MainActivity : Activity(), SensorEventListener {
   }
   measurementStatus = label("", 13f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
   measurementResult = label("", 12f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
-  root.addView(progressLabel)
-  root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
-   setMargins(dp(10), 0, dp(10), dp(2))
-  })
-  root.addView(measurementStatus)
-  root.addView(measurementResult)
   if (tracker == "ECG") {
+   val chart = FrameLayout(this)
    ecgWaveform = EcgWaveformView(this)
-   root.addView(ecgWaveform, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(145)))
-   root.addView(label("30 секунд · сигнал ЭКГ (мВ)", 11f))
+   chart.addView(ecgWaveform, FrameLayout.LayoutParams(
+    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+   progressLabel?.apply {
+    setTextColor(skin().fg)
+    setShadowLayer(dp(3).toFloat(), 0f, 0f, skin().bg)
+    chart.addView(this, FrameLayout.LayoutParams(
+     FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+   }
+   chart.addView(progressBar, FrameLayout.LayoutParams(
+    FrameLayout.LayoutParams.MATCH_PARENT, dp(8), Gravity.BOTTOM).apply {
+     setMargins(dp(8), 0, dp(8), dp(2))
+   })
+   root.addView(chart, LinearLayout.LayoutParams(
+    LinearLayout.LayoutParams.MATCH_PARENT, dp(105)))
+   root.addView(measurementStatus)
+  } else {
+   root.addView(progressLabel)
+   root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
+    setMargins(dp(10), 0, dp(10), dp(2))
+   })
+   root.addView(measurementStatus)
   }
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   actions.addView(button("Начать") {
@@ -447,6 +462,8 @@ class MainActivity : Activity(), SensorEventListener {
    ecgWaveform = null
    showHome()
   })
+  // Keep BIA results below the Back button; ECG diagnostics stay below the chart.
+  root.addView(measurementResult)
   showPage(root)
   updateMeasurementUi()
  }
@@ -743,7 +760,7 @@ class MainActivity : Activity(), SensorEventListener {
  private fun updateMeasurementUi() {
   if (screen != "measurement") return
   progressBar?.progress = measurementProgress
-  progressLabel?.text = if (activeTrackerName == "BIA" || measurementProgress > 0) "$measurementProgress%" else "—"
+  progressLabel?.text = if (activeTrackerName == "BIA" || activeTrackerName == "ECG" || measurementProgress > 0) "$measurementProgress%" else "—"
   measurementStatus?.text = measurementMessage
   measurementResult?.text = measurementPreview
  }
@@ -911,7 +928,7 @@ class MainActivity : Activity(), SensorEventListener {
         saveBiaResult(message)
        }
       } else if (!biaSavedForRun) {
-       measurementPreview = "Жир: " + formatBia(biaField(message, "fatRatio"), "%")
+       measurementPreview = ""
       }
      }
      updateMeasurementUi()
