@@ -141,7 +141,7 @@ class SamsungTrackerProbe(
   }
  }
  @Synchronized fun start() {
-  if (active) { emit("SpO2 probe already running"); return }
+  if (active) { emit("$trackerType probe already running"); return }
   active = true
   sampleCount = 0L
   lastSampleReportMs = 0L
@@ -178,14 +178,14 @@ class SamsungTrackerProbe(
       if (!active) { stop(); return@Thread }
       emit("$trackerType: waiting for measurements (60 seconds maximum)")
      } catch (e: Exception) {
-      emit("SpO2 start failed: ${e.javaClass.simpleName}: ${e.message}")
+      emit("$trackerType start failed: ${e.javaClass.simpleName}: ${e.message}")
       stop()
      }
     }.start()
    }
    override fun onServiceDisconnected(name: ComponentName) {
     remote = null
-    emit("SpO2: Samsung service disconnected")
+    emit("$trackerType: Samsung service disconnected")
    }
   }
   connection = conn
@@ -195,19 +195,19 @@ class SamsungTrackerProbe(
     "com.samsung.android.service.health.tracking.requesthandler.WearTrackerService"
    ))
    if (!context.bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
-    emit("SpO2: bindService returned false")
+    emit("$trackerType: bindService returned false")
     stop()
     return
    }
    Thread {
     Thread.sleep(60_000)
     if (active) {
-     emit("SpO2: 60-second timeout")
+     emit("$trackerType: 60-second timeout")
      stop()
     }
    }.start()
   } catch (e: Exception) {
-   emit("SpO2 binding failed: ${e.javaClass.simpleName}: ${e.message}")
+   emit("$trackerType binding failed: ${e.javaClass.simpleName}: ${e.message}")
    stop()
   }
  }
@@ -220,8 +220,8 @@ class SamsungTrackerProbe(
      it.writeString(appId)
      it.writeString(trackerType)
     }
-    emit("SpO2: listener removed")
-   } catch (e: Exception) { emit("SpO2 cleanup: ${e.javaClass.simpleName}: ${e.message}") }
+    emit("$trackerType: listener removed")
+   } catch (e: Exception) { emit("$trackerType cleanup: ${e.javaClass.simpleName}: ${e.message}") }
   }
   remote = null
   connection?.let { try { context.unbindService(it) } catch (_: Exception) {} }
