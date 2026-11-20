@@ -41,6 +41,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.ProgressBar
 import java.util.UUID
 
 /** Read-only, on-device diagnostics. No MQTT publishing or historical data access yet. */
@@ -198,51 +199,126 @@ class MainActivity : Activity(), SensorEventListener {
   "sky" -> "Небесная"
   else -> name
  }
+ private var progressBar: ProgressBar? = null
+ private var progressLabel: TextView? = null
+ private var measurementStatus: TextView? = null
+ private var measurementResult: TextView? = null
+ private var measurementProgress = 0
+ private var measurementMessage = "Ожидание"
+ private var measurementPreview = ""
  private fun showDiagnostics() {
   screen = "diagnostics"
   val root = page()
-  root.addView(label("Диагностика", 19f))
-  output = label("", 12f).apply { gravity = Gravity.START }
-  root.addView(button("Остановить тест датчика") { stopSamsungTrackerTest() })
+  root.addView(label("Измерения", 19f))
+  root.addView(button("♥ Пульс") { showMeasurement("HEART_RATE") })
+  root.addView(button("O₂ Кислород") { showMeasurement("SPO2") })
+  root.addView(button("ЭКГ") { showMeasurement("ECG") })
+  root.addView(button("Состав тела · BIA") { showMeasurement("BIA") })
+  root.addView(button("Системная диагностика") { showSystemDiagnostics() })
+  root.addView(button("Назад") { showSettings() })
+  showPage(root)
+ }
+ private fun showMeasurement(tracker: String) {
+  screen = "measurement"
+  val root = page()
+  val title = when (tracker) {
+   "BIA" -> "Состав тела"
+   "ECG" -> "ЭКГ"
+   "SPO2" -> "Кислород"
+   else -> "Пульс"
+  }
+  root.addView(label(title, 19f))
+  progressLabel = label("0%", 24f).apply { typeface = Typeface.DEFAULT_BOLD }
+  progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+   max = 100
+   progress = 0
+   progressTintList = android.content.res.ColorStateList.valueOf(skin().accent)
+  }
+  measurementStatus = label("Нажми «Начать»", 13f)
+  measurementResult = label("", 12f)
+  root.addView(progressLabel)
+  root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(12)).apply {
+   setMargins(dp(10), dp(5), dp(10), dp(8))
+  })
+  root.addView(measurementStatus)
+  root.addView(measurementResult)
+  root.addView(button("Начать") {
+   measurementProgress = 0
+   measurementMessage = "Ожидание данных датчика…"
+   measurementPreview = ""
+   if (tracker == "SPO2") startSpO2Measurement() else startSamsungTrackerTest(tracker)
+   updateMeasurementUi()
+  })
+  root.addView(button("Остановить") {
+   stopSamsungTrackerTest()
+   measurementMessage = "Измерение остановлено"
+   updateMeasurementUi()
+  })
+  root.addView(button("Назад") {
+   stopSamsungTrackerTest()
+   progressBar = null
+   progressLabel = null
+   measurementStatus = null
+   measurementResult = null
+   showDiagnostics()
+  })
+  showPage(root)
+  updateMeasurementUi()
+ }
+ private fun updateMeasurementUi() {
+  if (screen != "measurement") return
+  progressBar?.progress = measurementProgress
+  progressLabel?.text = if (activeTrackerName == "BIA" || measurementProgress > 0) "$measurementProgress%" else "—"
+  measurementStatus?.text = measurementMessage
+  measurementResult?.text = measurementPreview
+ }
+ private fun startSpO2Measurement() {
+  stopSamsungTrackerTest()
+  activeTrackerName = "SPO2"
+  measurementMessage = "Измерение кислорода…"
+  spo2Probe = SamsungTrackerProbe(this) { message ->
+   runOnUiThread {
+    val result = publishSpO2FromProbe(message)
+    if (result != null) {
+     spo2Result = result
+     measurementMessage = "Измерение завершено"
+     measurementPreview = result
+     measurementProgress = 100
+    } else if (message.contains("failed", true) || message.contains("error", true) || message.contains("timeout", true)) {
+     measurementMessage = "Ошибка: " + message.take(90)
+    }
+    updateMeasurementUi()
+   }
+  }
+  spo2Probe?.start()
+ }
+ private fun showSystemDiagnostics() {
+  screen = "system_diagnostics"
+  val root = page()
+  root.addView(label("Система", 18f))
+  output = label("", 11f).apply { gravity = Gravity.START }
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Samsung services") { checkSamsungServices() })
-  root.addView(button("BLE GATT: запустить") { startBle() })
-  root.addView(button("BLE GATT: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
-  root.addView(button("Тест SpO₂ (60 сек)") {
-   stopSamsungTrackerTest()
-   spo2Result = "Измерение SpO₂…"
-   refresh()
-   spo2Probe = SamsungTrackerProbe(this) { message ->
-    runOnUiThread {
-     // Keep noisy Samsung tracker progress in logcat, not on the small watch display.
-     val result = publishSpO2FromProbe(message)
-     if (result != null) {
-      spo2Result = result
-      refresh()
-     } else if (message.startsWith("Samsung tracker error") ||
-                message.startsWith("SpO2 start failed") ||
-                message.startsWith("SpO2 binding failed") ||
-                message.startsWith("SpO2: 60-second timeout")) {
-      spo2Result = "Измерение не удалось"
-      refresh()
-     }
-    }
-   }
-   spo2Probe?.start()
-  })
-  root.addView(button("Остановить SpO₂") { spo2Probe?.stop(); spo2Probe = null; spo2Result = "Измерение остановлено"; refresh() })
-  root.addView(label("Samsung Tracker: тест других датчиков", 13f))
-  for (tracker in listOf("HEART_RATE", "ECG", "BIA")) {
-   root.addView(button("Тест $tracker") { startSamsungTrackerTest(tracker) })
-  }
-  root.addView(label("Диагностика: сырые значения ECG/BIA не интерпретируются.", 11f))
+  root.addView(button("BLE: запустить") { startBle() })
+  root.addView(button("BLE: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
-  root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
-  root.addView(button("Датчики") { startSensors() })
-  root.addView(button("Назад") { stopSamsungTrackerTest(); showSettings() })
+  root.addView(button("Разрешения Health Connect") { requestHealthPermissions() })
+  root.addView(button("Датчики Android") { startSensors() })
+  root.addView(button("Назад") { showDiagnostics() })
   root.addView(output)
-  showPage(root); refresh()
+  showPage(root)
+  refresh()
+ }
+ private fun biaMessage(code: Int): String = when(code) {
+  0 -> "Измерение… удерживай пальцы"
+  2 -> "Проверка датчика (NV_NG)"
+  4 -> "Часы не касаются запястья"
+  7, 8, 9 -> "Коснись обеих боковых кнопок"
+  10 -> "Поправь ремешок: слабый контакт"
+  11 -> "Слишком сухие пальцы"
+  17 -> "Нестабильный контакт"
+  else -> "Ошибка BIA: $code"
  }
 
  private var heart: Float? = null
@@ -320,38 +396,46 @@ class MainActivity : Activity(), SensorEventListener {
   trackerSampleCount = 0
   trackerSamplePreviews.clear()
   trackerLastUiUpdate = 0L
-  samsungTrackerTestResult = "$tracker: ожидание данных…"
-  refresh()
+  measurementProgress = 0
+  measurementMessage = "Ожидание данных датчика…"
+  measurementPreview = ""
+  updateMeasurementUi()
   val generation = trackerTestGeneration
   val probe = SamsungTrackerProbe(this, tracker) { message ->
-   // Binder callbacks may arrive much faster than the watch screen can redraw.
-   if (generation == trackerTestGeneration && activeTrackerName == tracker) {
-    if (message.startsWith("$tracker sample received")) {
-     trackerSampleCount++
-     if (trackerSamplePreviews.size < 3) {
-      trackerSamplePreviews.add(message.take(220))
+   if (generation != trackerTestGeneration || activeTrackerName != tracker) return@SamsungTrackerProbe
+   if (tracker == "BIA" && message.startsWith("BIA samples=")) {
+    val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)?.toIntOrNull()
+    val progress = Regex("progress=([0-9.]+)").find(message)?.groupValues?.get(1)?.toFloatOrNull()
+    val fat = Regex("fatRatio=([0-9.]+)").find(message)?.groupValues?.get(1)
+    runOnUiThread {
+     if (generation != trackerTestGeneration) return@runOnUiThread
+     if (status != null) measurementMessage = biaMessage(status)
+     if (status == 0 && progress != null) {
+      measurementProgress = (progress * 100f).toInt().coerceIn(0, 100)
+      if (fat != null) measurementPreview = "Жировая масса: " + (fat.toFloatOrNull()?.let { "%.1f".format(it) } ?: fat) + "%"
+      if (measurementProgress >= 100) measurementMessage = "Измерение завершено"
      }
-     val now = android.os.SystemClock.elapsedRealtime()
-     if (now - trackerLastUiUpdate >= 1000L) {
-      trackerLastUiUpdate = now
-      val count = trackerSampleCount
-      runOnUiThread {
-       if (generation == trackerTestGeneration) {
-        samsungTrackerTestResult = "$tracker: получено событий $count" +
-         if (trackerSamplePreviews.isNotEmpty()) "\nПервые образцы:\n" + trackerSamplePreviews.joinToString("\n") else ""
-        refresh()
-       }
-      }
-     }
-    } else if (message.contains("failed", ignoreCase = true) ||
-               message.contains("error", ignoreCase = true) ||
-               message.contains("timeout", ignoreCase = true) ||
-               message.contains("bindService returned false")) {
+     updateMeasurementUi()
+    }
+   } else if (message.startsWith("$tracker samples=")) {
+    trackerSampleCount++
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (now - trackerLastUiUpdate >= 1000L) {
+     trackerLastUiUpdate = now
      runOnUiThread {
       if (generation == trackerTestGeneration) {
-       samsungTrackerTestResult = "$tracker: " + message.take(120)
-       refresh()
+       measurementMessage = "Получение данных…"
+       measurementPreview = "Событий: $trackerSampleCount"
+       updateMeasurementUi()
       }
+     }
+    }
+   } else if (message.contains("failed", true) || message.contains("error", true) ||
+              message.contains("timeout", true) || message.contains("bindService returned false")) {
+    runOnUiThread {
+     if (generation == trackerTestGeneration) {
+      measurementMessage = "Ошибка: " + message.take(100)
+      updateMeasurementUi()
      }
     }
    }
@@ -627,7 +711,7 @@ class MainActivity : Activity(), SensorEventListener {
 
  private fun refresh() {
   if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = steps?.toInt()?.toString() ?: "—" }
-  if (screen != "diagnostics" || !::output.isInitialized) return
+  if (screen != "system_diagnostics" || !::output.isInitialized) return
   output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
