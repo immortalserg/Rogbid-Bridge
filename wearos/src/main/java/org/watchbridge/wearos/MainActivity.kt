@@ -359,6 +359,8 @@ class MainActivity : Activity(), SensorEventListener {
  private var ecgContactSince = 0L
  private var ecgSessionId = 0L
  private var ecgContactLost = false
+ private val ecgPreparation = ArrayDeque<Float>()
+ private var ecgPreparationWarning = ""
  private var ecgLastUiAt = 0L
  private var ecgLastRenderedSample = 0
  private val ecgSamples = mutableListOf<Triple<Long, Float, Int>>()
@@ -443,6 +445,8 @@ class MainActivity : Activity(), SensorEventListener {
   ecgStartedAt = 0L // Wait for five seconds of continuous valid electrode contact.
   ecgContactSince = 0L
   ecgContactLost = false
+  ecgPreparation.clear()
+  ecgPreparationWarning = ""
   ecgLastUiAt = 0L
   ecgLastRenderedSample = 0
   measurementProgress = 0
@@ -457,8 +461,20 @@ class MainActivity : Activity(), SensorEventListener {
   if (ecgStartedAt == 0L) {
    if (contact == 0) {
     if (ecgContactSince == 0L) ecgContactSince = now
-    if (now - ecgContactSince >= 5000L) {
-     ecgStartedAt = now
+    ecgPreparation.addLast(value)
+    while (ecgPreparation.size > 2500) ecgPreparation.removeFirst()
+    val stableFor = now - ecgContactSince
+    if (stableFor >= 5000L && ecgPreparation.size >= 1500) {
+     val recent = ecgPreparation.toList()
+     val segment = (recent.size / 5).coerceAtLeast(1)
+     val firstMean = recent.take(segment).average()
+     val lastMean = recent.takeLast(segment).average()
+     val drift = kotlin.math.abs(lastMean - firstMean)
+     val localVariation = recent.zipWithNext().map { kotlin.math.abs(it.second - it.first).toDouble() }.average()
+     val acceptable = drift < kotlin.math.max(1.5, localVariation * 15.0)
+     if (acceptable || stableFor >= 15_000L) {
+      ecgPreparationWarning = if (acceptable) "" else "Сигнал нестабилен: высокий дрейф"
+      ecgStartedAt = now
      ecgLastUiAt = 0L
      ecgLastRenderedSample = 0
      synchronized(ecgSamples) { ecgSamples.clear() }
@@ -467,9 +483,12 @@ class MainActivity : Activity(), SensorEventListener {
       if (ecgRecording && ecgSessionId == session && ecgStartedAt != 0L &&
           SystemClock.elapsedRealtime() - ecgStartedAt >= 29_500L) finishEcgRecording()
      }, 30_000L)
+     } else ecgPreparationWarning = "Сигнал нестабилен: ожидание до 15 с"
     }
    } else {
     ecgContactSince = 0L
+    ecgPreparation.clear()
+    ecgPreparationWarning = ""
    }
    if (ecgStartedAt == 0L) {
     if (now - ecgLastUiAt >= 200L) {
@@ -479,7 +498,7 @@ class MainActivity : Activity(), SensorEventListener {
        measurementProgress = 0
        measurementMessage = if (contact == 0) "Проверка контакта электрода…" else "Прикоснись пальцем к электроду"
        measurementPreview = if (contact == 0 && ecgContactSince != 0L)
-        "Стабилизация сигнала: ${((now - ecgContactSince) / 1000L).coerceIn(0L, 5L)} из 5 с"
+        "Контакт: ${((now - ecgContactSince) / 1000L).coerceIn(0L, 15L)} с · $ecgPreparationWarning"
        else "Отсчёт начнётся после 5 секунд устойчивого контакта"
        updateMeasurementUi()
       }
@@ -507,7 +526,8 @@ class MainActivity : Activity(), SensorEventListener {
    ecgWaveform?.appendBatch(batch)
    measurementProgress = (elapsed / 300L).toInt().coerceIn(0, 100)
    measurementMessage = if (contact == 0) "Запись сигнала…" else "Проверь контакт электрода (код $contact)"
-   measurementPreview = "Отсчётов: ${synchronized(ecgSamples) { ecgSamples.size }}"
+   measurementPreview = "Отсчётов: ${synchronized(ecgSamples) { ecgSamples.size }}" +
+    if (ecgPreparationWarning.isNotEmpty()) " · $ecgPreparationWarning" else ""
    updateMeasurementUi()
   }
  }
