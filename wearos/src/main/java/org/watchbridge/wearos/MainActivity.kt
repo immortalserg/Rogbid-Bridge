@@ -266,6 +266,7 @@ class MainActivity : Activity(), SensorEventListener {
  private var measurementProgress = 0
  private var measurementMessage = "Ожидание"
  private var measurementPreview = ""
+ private var biaSavedForRun = false
  private fun showDiagnostics() {
   screen = "diagnostics"
   val root = page()
@@ -532,6 +533,7 @@ class MainActivity : Activity(), SensorEventListener {
   trackerSamplePreviews.clear()
   trackerLastUiUpdate = 0L
   measurementProgress = 0
+  biaSavedForRun = false
   measurementMessage = "Ожидание данных датчика…"
   measurementPreview = ""
   updateMeasurementUi()
@@ -549,8 +551,11 @@ class MainActivity : Activity(), SensorEventListener {
       if (measurementProgress >= 100) {
        measurementMessage = "Измерение завершено"
        measurementPreview = biaSummary(message)
-       saveBiaResult(message)
-      } else {
+       if (!biaSavedForRun) {
+        biaSavedForRun = true
+        saveBiaResult(message)
+       }
+      } else if (!biaSavedForRun) {
        measurementPreview = "Жир: " + formatBia(biaField(message, "fatRatio"), "%")
       }
      }
