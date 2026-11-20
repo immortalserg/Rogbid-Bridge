@@ -218,7 +218,7 @@ class MainActivity : Activity(), SensorEventListener {
    for (i in 0 until history.length()) {
     val entry = history.optJSONObject(i) ?: continue
     val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(entry.optLong("time")))
-    root.addView(label("$date   ${entry.optInt("value")} " + if (kind == "heart") "уд/мин" else "%", 12f))
+    root.addView(label("$date   ${entry.optInt("value")} " + (if (kind == "heart") "уд/мин" else "%"), 12f))
    }
   } else root.addView(label("История пока не подключена", 12f))
   showPage(root)
@@ -475,7 +475,7 @@ class MainActivity : Activity(), SensorEventListener {
      if (acceptable || stableFor >= 15_000L) {
       ecgPreparationWarning = if (acceptable) "" else "Сигнал нестабилен: высокий дрейф"
       ecgStartedAt = now
-     ecgLastUiAt = 0L
+      ecgLastUiAt = 0L
      ecgLastRenderedSample = 0
      synchronized(ecgSamples) { ecgSamples.clear() }
      val session = ecgSessionId
