@@ -9,8 +9,8 @@ android {
   applicationId = "org.watchbridge.wearos"
   minSdk = 30
   targetSdk = 35
-  versionCode = (System.getenv("WATCH_BRIDGE_VERSION_CODE")?.toIntOrNull() ?: 2)
-  versionName = "0.2.0"
+  versionCode = (System.getenv("WATCH_BRIDGE_VERSION_CODE")?.toIntOrNull() ?: 3)
+  versionName = "0.3.0-rc1"
  }
  val keyPath = System.getenv("WATCH_BRIDGE_KEYSTORE_PATH")
  val keyPassword = System.getenv("WATCH_BRIDGE_KEYSTORE_PASSWORD")
