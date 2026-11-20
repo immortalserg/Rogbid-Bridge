@@ -224,11 +224,11 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(actions)
   renderHeartButton()
   val indicators = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  val stepsTile = tile("♟ Шаги", steps?.toInt()?.toString() ?: "—") { showJournal("steps") }
-  val sleepTile = tile("☾ Сон", "—") { showJournal("sleep") }
-  stepsValue = stepsTile.second
-  indicators.addView(stepsTile.first, LinearLayout.LayoutParams(0, dp(70), 1f).apply { setMargins(dp(4), dp(3), dp(4), dp(3)) })
-  indicators.addView(sleepTile.first, LinearLayout.LayoutParams(0, dp(70), 1f).apply { setMargins(dp(4), dp(3), dp(4), dp(3)) })
+  val stepsButton = button("♟  " + (steps?.toInt()?.toString() ?: "—")) { showJournal("steps") }
+  val sleepButton = button("☾  —") { showJournal("sleep") }
+  stepsValue = stepsButton
+  indicators.addView(stepsButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(4), dp(2), dp(4), dp(2)) })
+  indicators.addView(sleepButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(4), dp(2), dp(4), dp(2)) })
   root.addView(indicators)
   val measurements = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
   measurements.addView(button("BIA") { showMeasurement("BIA") }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
@@ -815,12 +815,17 @@ class MainActivity : Activity(), SensorEventListener {
   measurementStatus?.text = measurementMessage
   measurementResult?.text = measurementPreview
  }
+ private var oxygenMeasurementGeneration = 0
  private fun startSpO2Measurement() {
   stopSamsungTrackerTest()
+  val generation = ++oxygenMeasurementGeneration
   activeTrackerName = "SPO2"
   measurementMessage = "Измерение кислорода…"
+  if (screen == "home") homeOxygenButton?.text = "O₂  …"
   spo2Probe = SamsungTrackerProbe(this) { message ->
    runOnUiThread {
+    if (generation != oxygenMeasurementGeneration || activeTrackerName != "SPO2") return@runOnUiThread
+    android.util.Log.i("WatchBridgeOxygen", message)
     val result = publishSpO2FromProbe(message)
     if (result != null) {
      spo2Result = result
@@ -828,15 +833,24 @@ class MainActivity : Activity(), SensorEventListener {
      if (oxygen != null) {
       prefs.edit().putString("last_oxygen", "$oxygen%").apply()
       saveVital("oxygen", oxygen)
-
-      stopOxygenBlink()
      }
      measurementMessage = "Измерение завершено"
      measurementPreview = result
      measurementProgress = 100
-    } else if (message.contains("failed", true) || message.contains("error", true) || message.contains("timeout", true)) {
      stopOxygenBlink()
-     measurementMessage = "Ошибка: " + message.take(90)
+    } else if (message.contains("error", true) || message.contains("failed", true) ||
+               message.contains("timeout", true) || message.contains("status=3") ||
+               message.contains("status=-6") || message.contains("tracker error code", true) ||
+               message.contains("bindService returned false", true)) {
+     measurementMessage = "Ошибка измерения O₂"
+     measurementPreview = message.take(160)
+     spo2Result = measurementPreview
+     stopOxygenBlink()
+     if (screen == "home") homeOxygenButton?.text = "O₂  Ошибка"
+    } else if (screen == "home" && message.startsWith("SPO2 status=")) {
+     // Keep the last raw status visible instead of silently waiting for a result.
+     val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)
+     homeOxygenButton?.text = "O₂  " + (if (status != null) "код $status" else "…")
     }
     updateMeasurementUi()
    }
@@ -1284,7 +1298,7 @@ class MainActivity : Activity(), SensorEventListener {
  }
 
  private fun refresh() {
-  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = steps?.toInt()?.toString() ?: "—" }
+  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = "♟  " + (steps?.toInt()?.toString() ?: "—") }
   if (screen != "system_diagnostics" || !::output.isInitialized) return
   output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
