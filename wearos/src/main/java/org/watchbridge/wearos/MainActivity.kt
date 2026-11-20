@@ -30,6 +30,9 @@ import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -267,6 +270,12 @@ class MainActivity : Activity(), SensorEventListener {
  private var measurementMessage = "Ожидание"
  private var measurementPreview = ""
  private var biaSavedForRun = false
+ private var ecgWaveform: EcgWaveformView? = null
+ private var ecgRecording = false
+ private var ecgStartedAt = 0L
+ private var ecgLastUiAt = 0L
+ private val ecgSamples = mutableListOf<Triple<Long, Float, Int>>()
+ private val ecgHandler = Handler(Looper.getMainLooper())
  private fun showDiagnostics() {
   screen = "diagnostics"
   val root = page()
@@ -305,29 +314,119 @@ class MainActivity : Activity(), SensorEventListener {
   })
   root.addView(measurementStatus)
   root.addView(measurementResult)
+  if (tracker == "ECG") {
+   ecgWaveform = EcgWaveformView(this)
+   root.addView(ecgWaveform, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(145)))
+   root.addView(label("30 секунд · сигнал ЭКГ (мВ) · без медицинской интерпретации", 11f))
+  }
   root.addView(button("Начать") {
    measurementProgress = 0
    measurementMessage = "Ожидание данных датчика…"
    measurementPreview = ""
-   if (tracker == "SPO2") startSpO2Measurement() else startSamsungTrackerTest(tracker)
+   if (tracker == "ECG") startEcgRecording()
+   else if (tracker == "SPO2") startSpO2Measurement()
+   else startSamsungTrackerTest(tracker)
    updateMeasurementUi()
   })
   if (tracker == "BIA") root.addView(button("История результатов") { stopSamsungTrackerTest(); showBiaHistory() })
+  if (tracker == "ECG") root.addView(button("Записи ЭКГ") { finishEcgRecording(); showEcgHistory() })
   root.addView(button("Остановить") {
-   stopSamsungTrackerTest()
+   if (tracker == "ECG") finishEcgRecording() else stopSamsungTrackerTest()
    measurementMessage = "Измерение остановлено"
    updateMeasurementUi()
   })
   root.addView(button("Назад") {
-   stopSamsungTrackerTest()
+   if (tracker == "ECG") finishEcgRecording() else stopSamsungTrackerTest()
    progressBar = null
    progressLabel = null
    measurementStatus = null
    measurementResult = null
+   ecgWaveform = null
    showDiagnostics()
   })
   showPage(root)
   updateMeasurementUi()
+ }
+ private fun startEcgRecording() {
+  stopSamsungTrackerTest()
+  synchronized(ecgSamples) { ecgSamples.clear() }
+  ecgWaveform?.clear()
+  ecgRecording = true
+  ecgStartedAt = SystemClock.elapsedRealtime()
+  ecgLastUiAt = 0L
+  measurementProgress = 0
+  measurementMessage = "Прикоснись пальцем к электроду"
+  measurementPreview = "Ожидание сигнала ЭКГ…"
+  startSamsungTrackerTest("ECG")
+  ecgHandler.postDelayed({
+   if (ecgRecording && SystemClock.elapsedRealtime() - ecgStartedAt >= 29_500L) finishEcgRecording()
+  }, 30_000L)
+ }
+ private fun receiveEcgSample(value: Float, contact: Int, timestamp: Long) {
+  if (!ecgRecording || !value.isFinite()) return
+  val elapsed = SystemClock.elapsedRealtime() - ecgStartedAt
+  if (elapsed < 0 || elapsed > 31_000) return
+  synchronized(ecgSamples) {
+   if (ecgSamples.size < 30000) ecgSamples.add(Triple(timestamp, value, contact))
+  }
+  val now = SystemClock.elapsedRealtime()
+  if (now - ecgLastUiAt < 100L) return
+  ecgLastUiAt = now
+  runOnUiThread {
+   if (!ecgRecording || screen != "measurement" || activeTrackerName != "ECG") return@runOnUiThread
+   ecgWaveform?.append(value)
+   measurementProgress = (elapsed / 300L).toInt().coerceIn(0, 100)
+   measurementMessage = if (contact == 0) "Запись сигнала…" else "Проверь контакт электрода (код $contact)"
+   measurementPreview = "Отсчётов: ${synchronized(ecgSamples) { ecgSamples.size }}"
+   updateMeasurementUi()
+  }
+ }
+ private fun finishEcgRecording() {
+  if (!ecgRecording) { stopSamsungTrackerTest(); return }
+  ecgRecording = false
+  val durationMs = (SystemClock.elapsedRealtime() - ecgStartedAt).coerceAtLeast(0L)
+  stopSamsungTrackerTest()
+  val copy = synchronized(ecgSamples) { ecgSamples.toList() }
+  if (copy.isNotEmpty()) {
+   try {
+    val fileName = "ecg_${System.currentTimeMillis()}.csv"
+    openFileOutput(fileName, MODE_PRIVATE).bufferedWriter().use { writer ->
+     writer.write("timestamp,ecg_mv,lead_off\\n")
+     copy.forEach { (timestamp, mv, lead) -> writer.write("$timestamp,$mv,$lead\\n") }
+    }
+    val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
+    val item = JSONObject().put("file", fileName).put("timestamp", System.currentTimeMillis())
+     .put("durationMs", durationMs).put("samples", copy.size)
+    val updated = JSONArray().put(item)
+    for (i in 0 until minOf(19, history.length())) updated.put(history.get(i))
+    prefs.edit().putString("ecg_history", updated.toString()).apply()
+    measurementMessage = "Запись ЭКГ сохранена"
+    measurementPreview = "${durationMs / 1000} с · ${copy.size} отсчётов"
+   } catch (e: Exception) {
+    measurementMessage = "Ошибка сохранения ЭКГ"
+    measurementPreview = e.message ?: e.javaClass.simpleName
+   }
+  } else {
+   measurementMessage = "Нет отсчётов ЭКГ"
+   measurementPreview = "Проверь контакт электрода"
+  }
+  measurementProgress = (durationMs / 300L).toInt().coerceIn(0, 100)
+  updateMeasurementUi()
+ }
+ private fun showEcgHistory() {
+  screen = "ecg_history"
+  val root = page()
+  root.addView(label("Записи ЭКГ", 18f))
+  val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
+  if (history.length() == 0) root.addView(label("Записей пока нет", 12f))
+  for (i in 0 until history.length()) {
+   val item = history.optJSONObject(i) ?: continue
+   val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(item.optLong("timestamp")))
+   root.addView(label("$date · ${item.optLong("durationMs") / 1000} с · ${item.optInt("samples")} отсчётов", 12f))
+  }
+  root.addView(label("Исходные отсчёты сохранены в CSV во внутренней памяти часов.", 11f))
+  root.addView(button("Назад") { showMeasurement("ECG") })
+  showPage(root)
  }
  private fun biaField(message: String, name: String): Float? =
   Regex("(?:^|\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\.[0-9]+)?)")
@@ -532,13 +631,15 @@ class MainActivity : Activity(), SensorEventListener {
   trackerSampleCount = 0
   trackerSamplePreviews.clear()
   trackerLastUiUpdate = 0L
-  measurementProgress = 0
+  if (tracker != "ECG") measurementProgress = 0
   biaSavedForRun = false
   measurementMessage = "Ожидание данных датчика…"
   measurementPreview = ""
   updateMeasurementUi()
   val generation = trackerTestGeneration
-  val probe = SamsungTrackerProbe(this, tracker, if (tracker == "BIA") bodyProfile() else null) { message ->
+  val probe = SamsungTrackerProbe(this, tracker, if (tracker == "BIA") bodyProfile() else null,
+   if (tracker == "ECG") ({ value: Float, contact: Int, time: Long -> receiveEcgSample(value, contact, time) }) else null
+  ) { message ->
    if (generation != trackerTestGeneration || activeTrackerName != tracker) return@SamsungTrackerProbe
    if (tracker == "BIA" && message.startsWith("BIA samples=")) {
     val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)?.toIntOrNull()
@@ -568,8 +669,10 @@ class MainActivity : Activity(), SensorEventListener {
      trackerLastUiUpdate = now
      runOnUiThread {
       if (generation == trackerTestGeneration) {
-       measurementMessage = "Получение данных…"
-       measurementPreview = "Событий: $trackerSampleCount"
+       if (tracker != "ECG") {
+        measurementMessage = "Получение данных…"
+        measurementPreview = "Событий: $trackerSampleCount"
+       }
        updateMeasurementUi()
       }
      }
