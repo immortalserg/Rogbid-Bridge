@@ -15,6 +15,7 @@ class SamsungTrackerProbe(
  private val context: Context,
  private val trackerType: String = "SPO2",
  private val bodyProfile: BodyProfile? = null,
+ private val ecgSample: ((Float, Int, Long) -> Unit)? = null,
  private val report: (String) -> Unit
 ) {
  data class BodyProfile(val heightCm: Float, val weightKg: Float, val gender: Int, val age: Int)
@@ -44,6 +45,10 @@ class SamsungTrackerProbe(
        if (trackerType != "SPO2") {
         val v = point.serviceValue
         sampleCount++
+        if (trackerType == "ECG" && v.size >= 6) {
+         try { ecgSample?.invoke(v[0].floatValue, v[2].integerValue, point.timeStamp) }
+         catch (e: Exception) { Log.w("WatchBridgeSamsung", "ECG sample callback failed", e) }
+        }
         val message = when (trackerType) {
          "ECG" -> if (v.size >= 6) {
           "ECG samples=$sampleCount t=${point.timeStamp} " +
