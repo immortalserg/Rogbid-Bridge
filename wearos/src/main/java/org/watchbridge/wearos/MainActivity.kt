@@ -45,6 +45,11 @@ import android.widget.ProgressBar
 import android.widget.EditText
 import android.text.InputType
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Read-only, on-device diagnostics. No MQTT publishing or historical data access yet. */
 class MainActivity : Activity(), SensorEventListener {
@@ -269,6 +274,7 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("O₂ Кислород") { showMeasurement("SPO2") })
   root.addView(button("ЭКГ") { showMeasurement("ECG") })
   root.addView(button("Состав тела · BIA") { showMeasurement("BIA") })
+  root.addView(button("История состава тела") { showBiaHistory() })
   root.addView(button("Системная диагностика") { showSystemDiagnostics() })
   root.addView(button("Назад") { showSettings() })
   showPage(root)
@@ -305,6 +311,7 @@ class MainActivity : Activity(), SensorEventListener {
    if (tracker == "SPO2") startSpO2Measurement() else startSamsungTrackerTest(tracker)
    updateMeasurementUi()
   })
+  if (tracker == "BIA") root.addView(button("История результатов") { stopSamsungTrackerTest(); showBiaHistory() })
   root.addView(button("Остановить") {
    stopSamsungTrackerTest()
    measurementMessage = "Измерение остановлено"
@@ -320,6 +327,71 @@ class MainActivity : Activity(), SensorEventListener {
   })
   showPage(root)
   updateMeasurementUi()
+ }
+ private fun biaField(message: String, name: String): Float? =
+  Regex("(?:^|\\\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\\\.[0-9]+)?)")
+   .find(message)?.groupValues?.get(1)?.toFloatOrNull()
+ private fun formatBia(value: Float?, unit: String): String =
+  if (value != null && value.isFinite()) String.format(Locale.getDefault(), "%.1f %s", value, unit) else "—"
+ private fun biaSummary(message: String): String {
+  val fields = listOf(
+   Triple("Жир", "fatRatio", "%"),
+   Triple("Жировая масса", "fatMass", "кг"),
+   Triple("Вода", "bodyWater", "кг"),
+   Triple("Скелетные мышцы", "muscleMass", "кг"),
+   Triple("Доля мышц", "muscleRatio", "%"),
+   Triple("Безжировая масса", "fatFreeMass", "кг"),
+   Triple("Базовый обмен", "bmr", "ккал/сут"),
+   Triple("Импеданс", "impedanceMagnitude", "Ом")
+  )
+  return fields.joinToString("\\n") { (title, key, unit) ->
+   "$title: ${formatBia(biaField(message, key), unit)}"
+  }
+ }
+ private fun saveBiaResult(message: String) {
+  val entry = JSONObject()
+  entry.put("timestamp", System.currentTimeMillis())
+  for (key in listOf("fatRatio", "fatMass", "bodyWater", "muscleRatio", "muscleMass",
+                     "bmr", "fatFreeRatio", "fatFreeMass", "impedanceMagnitude", "impedanceDegree")) {
+   biaField(message, key)?.let { entry.put(key, it.toDouble()) }
+  }
+  val history = try { JSONArray(prefs.getString("bia_history", "[]")) } catch (_: Exception) { JSONArray() }
+  val updated = JSONArray()
+  updated.put(entry)
+  for (i in 0 until minOf(history.length(), 49)) updated.put(history.get(i))
+  prefs.edit().putString("bia_history", updated.toString()).apply()
+ }
+ private fun showBiaHistory() {
+  screen = "bia_history"
+  val root = page()
+  root.addView(label("История BIA", 18f))
+  val history = try { JSONArray(prefs.getString("bia_history", "[]")) } catch (_: Exception) { JSONArray() }
+  if (history.length() == 0) root.addView(label("Завершённых измерений пока нет", 12f))
+  for (i in 0 until history.length()) {
+   val entry = history.optJSONObject(i) ?: continue
+   val date = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(entry.optLong("timestamp")))
+   val fat = entry.optDouble("fatRatio", Double.NaN)
+   val fatText = if (fat.isFinite()) String.format(Locale.getDefault(), "%.1f%%", fat) else "—"
+   root.addView(button("$date · $fatText") {
+    val details = page()
+    details.addView(label(date, 16f))
+    val lines = listOf(
+     Triple("Жир", "fatRatio", "%"), Triple("Жировая масса", "fatMass", "кг"),
+     Triple("Вода", "bodyWater", "кг"), Triple("Мышцы", "muscleMass", "кг"),
+     Triple("Безжировая масса", "fatFreeMass", "кг"),
+     Triple("Базовый обмен", "bmr", "ккал/сут"),
+     Triple("Импеданс", "impedanceMagnitude", "Ом")
+    ).joinToString("\\n") { (title, key, unit) ->
+     "$title: ${formatBia(if (entry.has(key)) entry.optDouble(key).toFloat() else null, unit)}"
+    }
+    details.addView(label(lines, 13f))
+    details.addView(button("Назад") { showBiaHistory() })
+    screen = "bia_details"
+    showPage(details)
+   })
+  }
+  root.addView(button("Назад") { showDiagnostics() })
+  showPage(root)
  }
  private fun updateMeasurementUi() {
   if (screen != "measurement") return
@@ -469,14 +541,18 @@ class MainActivity : Activity(), SensorEventListener {
    if (tracker == "BIA" && message.startsWith("BIA samples=")) {
     val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)?.toIntOrNull()
     val progress = Regex("progress=([0-9.]+)").find(message)?.groupValues?.get(1)?.toFloatOrNull()
-    val fat = Regex("fatRatio=([0-9.]+)").find(message)?.groupValues?.get(1)
     runOnUiThread {
      if (generation != trackerTestGeneration) return@runOnUiThread
      if (status != null) measurementMessage = biaMessage(status)
      if (status == 0 && progress != null) {
       measurementProgress = (progress * 100f).toInt().coerceIn(0, 100)
-      if (fat != null) measurementPreview = "Жировая масса: " + (fat.toFloatOrNull()?.let { "%.1f".format(it) } ?: fat) + "%"
-      if (measurementProgress >= 100) measurementMessage = "Измерение завершено"
+      if (measurementProgress >= 100) {
+       measurementMessage = "Измерение завершено"
+       measurementPreview = biaSummary(message)
+       saveBiaResult(message)
+      } else {
+       measurementPreview = "Жир: " + formatBia(biaField(message, "fatRatio"), "%")
+      }
      }
      updateMeasurementUi()
     }
