@@ -51,7 +51,7 @@ class SamsungTrackerProbe(
          } else "ECG unexpected field count=${v.size}"
          "BIA" -> if (v.size >= 12) {
           "BIA samples=$sampleCount t=${point.timeStamp} " +
-           "status=${v[0].integerValue} fatRatio=${v[1].floatValue} " +
+           "status=${v[0].integerValue} (${biaStatusName(v[0].integerValue)}) fatRatio=${v[1].floatValue} " +
            "fatMass=${v[2].floatValue} bodyWater=${v[3].floatValue} " +
            "muscleRatio=${v[4].floatValue} muscleMass=${v[5].floatValue} " +
            "bmr=${v[6].floatValue} fatFreeRatio=${v[7].floatValue} " +
@@ -98,6 +98,28 @@ class SamsungTrackerProbe(
    return true
   }
  }
+ private fun biaStatusName(status: Int): String = when (status) {
+  0 -> "NONE"
+  1 -> "RESERVED1"
+  2 -> "NV_NG"
+  3 -> "RESERVED2"
+  4 -> "WRIST_DETACH"
+  5 -> "RESERVED3"
+  6 -> "RESERVED4"
+  7 -> "FINGER_2H_DETACH"
+  8 -> "FINGER_4H_DETACH"
+  9 -> "FINGER_ALL_DETACH"
+  10 -> "WRIST_LOOSE"
+  11 -> "FINGER_DRY"
+  12 -> "RESERVED5"
+  13 -> "BODY_MAGNITUDE_NG"
+  14 -> "TWO_HAND_CONTACT"
+  15 -> "SUS_FRAME_CONTACT"
+  16 -> "RESERVED6"
+  17 -> "UNSTABLE_IMPEDANCE"
+  18 -> "BFR_OUTAGE"
+  else -> "UNKNOWN"
+ }
  private fun emit(message: String) {
   Log.i("WatchBridgeSamsung", message)
   report(message)
@@ -131,11 +153,9 @@ class SamsungTrackerProbe(
       transact(binder, 1) {
        it.writeString(appId)
        it.writeString(trackerType)
-       it.writeInt(1) // non-null TrackerUserProfile
-       it.writeFloat(-1f) // height
-       it.writeFloat(-1f) // weight
-       it.writeInt(-1) // gender
-       it.writeInt(-1) // age
+       // Null profile uses Samsung's built-in BIA fallback values.
+       // Do not send a non-null profile with invalid negative measurements.
+       it.writeInt(0) // null TrackerUserProfile
        it.writeString(null) // exerciseType
       }
       if (!active) return@Thread
