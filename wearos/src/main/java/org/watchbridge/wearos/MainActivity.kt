@@ -273,6 +273,9 @@ class MainActivity : Activity(), SensorEventListener {
  private var ecgWaveform: EcgWaveformView? = null
  private var ecgRecording = false
  private var ecgStartedAt = 0L
+ private var ecgContactSince = 0L
+ private var ecgSessionId = 0L
+ private var ecgContactLost = false
  private var ecgLastUiAt = 0L
  private var ecgLastRenderedSample = 0
  private val ecgSamples = mutableListOf<Triple<Long, Float, Int>>()
@@ -352,26 +355,60 @@ class MainActivity : Activity(), SensorEventListener {
   stopSamsungTrackerTest()
   synchronized(ecgSamples) { ecgSamples.clear() }
   ecgWaveform?.clear()
+  ecgSessionId++
   ecgRecording = true
-  ecgStartedAt = SystemClock.elapsedRealtime()
+  ecgStartedAt = 0L // Wait for one second of continuous valid electrode contact.
+  ecgContactSince = 0L
+  ecgContactLost = false
   ecgLastUiAt = 0L
   ecgLastRenderedSample = 0
   measurementProgress = 0
   measurementMessage = "Прикоснись пальцем к электроду"
-  measurementPreview = "Ожидание сигнала ЭКГ…"
+  measurementPreview = "Ожидание устойчивого контакта…"
+  updateMeasurementUi()
   startSamsungTrackerTest("ECG")
-  ecgHandler.postDelayed({
-   if (ecgRecording && SystemClock.elapsedRealtime() - ecgStartedAt >= 29_500L) finishEcgRecording()
-  }, 30_000L)
  }
  private fun receiveEcgSample(value: Float, contact: Int, timestamp: Long) {
   if (!ecgRecording || !value.isFinite()) return
-  val elapsed = SystemClock.elapsedRealtime() - ecgStartedAt
-  if (elapsed < 0 || elapsed > 31_000) return
+  val now = SystemClock.elapsedRealtime()
+  if (ecgStartedAt == 0L) {
+   if (contact == 0) {
+    if (ecgContactSince == 0L) ecgContactSince = now
+    if (now - ecgContactSince >= 1000L) {
+     ecgStartedAt = now
+     ecgLastUiAt = 0L
+     ecgLastRenderedSample = 0
+     synchronized(ecgSamples) { ecgSamples.clear() }
+     val session = ecgSessionId
+     ecgHandler.postDelayed({
+      if (ecgRecording && ecgSessionId == session && ecgStartedAt != 0L &&
+          SystemClock.elapsedRealtime() - ecgStartedAt >= 29_500L) finishEcgRecording()
+     }, 30_000L)
+    }
+   } else {
+    ecgContactSince = 0L
+   }
+   if (ecgStartedAt == 0L) {
+    if (now - ecgLastUiAt >= 200L) {
+     ecgLastUiAt = now
+     runOnUiThread {
+      if (ecgRecording && ecgStartedAt == 0L && screen == "measurement") {
+       measurementProgress = 0
+       measurementMessage = if (contact == 0) "Проверка контакта электрода…" else "Прикоснись пальцем к электроду"
+       measurementPreview = "Отсчёт начнётся после 1 секунды устойчивого контакта"
+       updateMeasurementUi()
+      }
+     }
+    }
+    return
+   }
+  }
+  val elapsed = now - ecgStartedAt
+  if (elapsed < 0 || elapsed > 30_500L) return
   synchronized(ecgSamples) {
    if (ecgSamples.size < 30000) ecgSamples.add(Triple(timestamp, value, contact))
   }
-  val now = SystemClock.elapsedRealtime()
+  if (contact != 0) ecgContactLost = true
   if (now - ecgLastUiAt < 100L) return
   ecgLastUiAt = now
   runOnUiThread {
@@ -392,7 +429,8 @@ class MainActivity : Activity(), SensorEventListener {
  private fun finishEcgRecording() {
   if (!ecgRecording) { stopSamsungTrackerTest(); return }
   ecgRecording = false
-  val durationMs = (SystemClock.elapsedRealtime() - ecgStartedAt).coerceAtLeast(0L)
+  ecgSessionId++
+  val durationMs = if (ecgStartedAt == 0L) 0L else (SystemClock.elapsedRealtime() - ecgStartedAt).coerceAtLeast(0L)
   stopSamsungTrackerTest()
   val copy = synchronized(ecgSamples) { ecgSamples.toList() }
   if (copy.isNotEmpty()) {
@@ -404,12 +442,13 @@ class MainActivity : Activity(), SensorEventListener {
     }
     val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
     val item = JSONObject().put("file", fileName).put("timestamp", System.currentTimeMillis())
-     .put("durationMs", durationMs).put("samples", copy.size)
+     .put("durationMs", durationMs).put("samples", copy.size).put("contactLost", ecgContactLost)
     val updated = JSONArray().put(item)
     for (i in 0 until minOf(19, history.length())) updated.put(history.get(i))
     prefs.edit().putString("ecg_history", updated.toString()).apply()
     measurementMessage = "Запись ЭКГ сохранена"
-    measurementPreview = "${durationMs / 1000} с · ${copy.size} отсчётов"
+    measurementPreview = "${durationMs / 1000} с · ${copy.size} отсчётов" +
+     if (ecgContactLost) " · Были нарушения контакта" else ""
    } catch (e: Exception) {
     measurementMessage = "Ошибка сохранения ЭКГ"
     measurementPreview = e.message ?: e.javaClass.simpleName
