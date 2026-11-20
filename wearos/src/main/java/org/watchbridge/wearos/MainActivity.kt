@@ -735,7 +735,8 @@ class MainActivity : Activity(), SensorEventListener {
   }
   root.addView(button("Назад") { showMeasurement("BIA") })
   showPage(root)
- }vate fun updateMeasurementUi() {
+ }
+ private fun updateMeasurementUi() {
   if (screen != "measurement") return
   progressBar?.progress = measurementProgress
   progressLabel?.text = if (activeTrackerName == "BIA" || measurementProgress > 0) "$measurementProgress%" else "—"
