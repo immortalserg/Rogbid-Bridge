@@ -42,6 +42,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.ProgressBar
+import android.widget.EditText
+import android.text.InputType
 import java.util.UUID
 
 /** Read-only, on-device diagnostics. No MQTT publishing or historical data access yet. */
@@ -135,6 +137,7 @@ class MainActivity : Activity(), SensorEventListener {
   val root = page()
   root.addView(label("Настройки", 17f))
   root.addView(button("Настройки приложения") { showAppSettings() })
+  root.addView(button("Параметры тела") { showBodySettings() })
   root.addView(button("Диагностика датчиков") { showDiagnostics() })
   root.addView(button("Назад") { showHome() })
   showPage(root)
@@ -187,6 +190,58 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Назад") { showSettings() })
   showPage(root)
  }
+ private fun showBodySettings() {
+  screen = "body_settings"
+  val root = page()
+  root.addView(label("Параметры тела", 18f))
+  root.addView(label("Для расчёта состава тела (BIA)", 12f))
+  fun field(title: String, key: String, decimal: Boolean): EditText {
+   root.addView(label(title, 12f))
+   val input = EditText(this).apply {
+    setText(prefs.getString(key, "") ?: "")
+    textSize = 16f
+    setTextColor(skin().fg)
+    setHintTextColor(skin().accent)
+    gravity = Gravity.CENTER
+    inputType = if (decimal) InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                else InputType.TYPE_CLASS_NUMBER
+    setSingleLine(true)
+    background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(10).toFloat() }
+    setPadding(dp(8), dp(7), dp(8), dp(7))
+   }
+   root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(43)))
+   return input
+  }
+  val height = field("Рост (см)", "body_height", true)
+  val weight = field("Вес (кг)", "body_weight", true)
+  val age = field("Возраст (лет)", "body_age", false)
+  root.addView(label("Пол для алгоритма BIA", 12f))
+  val gender = Spinner(this).apply {
+   adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Мужской", "Женский"))
+   setSelection(if (prefs.getInt("body_gender", 1) == 0) 1 else 0)
+  }
+  root.addView(gender)
+  val notice = label("", 12f)
+  root.addView(notice)
+  root.addView(button("Сохранить") {
+   val h = height.text.toString().replace(',', '.').toFloatOrNull()
+   val w = weight.text.toString().replace(',', '.').toFloatOrNull()
+   val a = age.text.toString().toIntOrNull()
+   if (h == null || h !in 100f..250f || w == null || w !in 20f..300f || a == null || a !in 18..120) {
+    notice.text = "Проверь данные: рост 100–250 см, вес 20–300 кг, возраст 18–120"
+   } else {
+    prefs.edit()
+     .putString("body_height", h.toString())
+     .putString("body_weight", w.toString())
+     .putString("body_age", a.toString())
+     .putInt("body_gender", if (gender.selectedItemPosition == 0) 1 else 0)
+     .apply()
+    notice.text = "Сохранено"
+   }
+  })
+  root.addView(button("Назад") { showSettings() })
+  showPage(root)
+ }
  private fun themeTitle(name: String): String = when (name) {
   "dark" -> "Тёмная"
   "light" -> "Светлая"
@@ -228,6 +283,7 @@ class MainActivity : Activity(), SensorEventListener {
    else -> "Пульс"
   }
   root.addView(label(title, 19f))
+  if (tracker == "BIA") root.addView(label(if (bodyProfile() == null) "Сначала укажи параметры тела в настройках" else "Профиль BIA настроен", 11f))
   progressLabel = label("0%", 24f).apply { typeface = Typeface.DEFAULT_BOLD }
   progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
    max = 100
@@ -390,6 +446,13 @@ class MainActivity : Activity(), SensorEventListener {
   }
   refresh()
  }
+ private fun bodyProfile(): SamsungTrackerProbe.BodyProfile? {
+  val h = prefs.getString("body_height", null)?.toFloatOrNull() ?: return null
+  val w = prefs.getString("body_weight", null)?.toFloatOrNull() ?: return null
+  val a = prefs.getString("body_age", null)?.toIntOrNull() ?: return null
+  if (h !in 100f..250f || w !in 20f..300f || a !in 18..120) return null
+  return SamsungTrackerProbe.BodyProfile(h, w, prefs.getInt("body_gender", 1), a)
+ }
  private fun startSamsungTrackerTest(tracker: String) {
   stopSamsungTrackerTest()
   activeTrackerName = tracker
@@ -401,7 +464,7 @@ class MainActivity : Activity(), SensorEventListener {
   measurementPreview = ""
   updateMeasurementUi()
   val generation = trackerTestGeneration
-  val probe = SamsungTrackerProbe(this, tracker) { message ->
+  val probe = SamsungTrackerProbe(this, tracker, if (tracker == "BIA") bodyProfile() else null) { message ->
    if (generation != trackerTestGeneration || activeTrackerName != tracker) return@SamsungTrackerProbe
    if (tracker == "BIA" && message.startsWith("BIA samples=")) {
     val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)?.toIntOrNull()
