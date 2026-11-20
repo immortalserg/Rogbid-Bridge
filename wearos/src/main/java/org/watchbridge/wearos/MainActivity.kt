@@ -143,6 +143,13 @@ class MainActivity : Activity(), SensorEventListener {
   }
  }
  private var lastHomeTapKind = ""
+ private fun transmitVital(kind: String, value: Int, time: Long = System.currentTimeMillis()) {
+  val event = JSONObject().put("kind", kind).put("id", "$kind:$time")
+   .put("measured_at", java.time.Instant.ofEpochMilli(time).toString())
+  if (kind == "heart") event.put("bpm", value) else event.put("spo2", value)
+  mqtt?.publish(kind, event.toString())
+  bleServer?.publishJournal(event.toString())
+ }
  private fun saveVital(kind: String, value: Int) {
   val key = "vital_history_$kind"
   val old = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
@@ -151,6 +158,7 @@ class MainActivity : Activity(), SensorEventListener {
   val updated = JSONArray().put(JSONObject().put("time", System.currentTimeMillis()).put("value", value))
   for (i in 0 until minOf(old.length(), 49)) updated.put(old.get(i))
   prefs.edit().putString(key, updated.toString()).apply()
+  transmitVital(kind, value)
  }
  private var oxygenAnimating = false
  private var heartBeatGeneration = 0
@@ -260,6 +268,13 @@ class MainActivity : Activity(), SensorEventListener {
   history.put(day, entry)
   history.keys().asSequence().toList().sortedDescending().drop(90).forEach { history.remove(it) }
   prefs.edit().putString("step_daily_history", history.toString()).apply()
+  if (increment > 0L) {
+   val event = JSONObject().put("kind", "steps").put("id", "steps:$day")
+    .put("measured_at", java.time.Instant.now().toString()).put("date", day)
+    .put("steps", updated).put("diatance", 0).put("kcal", 0)
+   mqtt?.publish("steps", event.toString())
+   bleServer?.publishJournal(event.toString())
+  }
  }
  private fun showJournal(kind: String) {
   stopHeartBlink()
@@ -1434,6 +1449,7 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onDestroy() {
   spo2Probe?.stop()
   bleServer?.stop()
+  mqtt?.close()
   for (connection in samsungConnections) try { unbindService(connection) } catch (_: Exception) {}
   samsungConnections.clear()
   super.onDestroy()
