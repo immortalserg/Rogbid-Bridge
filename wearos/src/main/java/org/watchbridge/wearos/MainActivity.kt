@@ -15,6 +15,11 @@ import android.os.OutcomeReceiver
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import android.app.Activity
+import android.app.DatePickerDialog
+import java.time.LocalDate
+import java.time.Period
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
@@ -304,7 +309,18 @@ class MainActivity : Activity(), SensorEventListener {
   }
   val height = field("Рост (см)", "body_height", true)
   val weight = field("Вес (кг)", "body_weight", true)
-  val age = field("Возраст (лет)", "body_age", false)
+  val birthDate = label(prefs.getString("body_birth_date", null) ?: "Выбрать дату рождения", 14f)
+  root.addView(label("Дата рождения", 12f))
+  root.addView(button(prefs.getString("body_birth_date", null) ?: "Выбрать дату рождения") {
+   val existing = parseBirthDate(prefs.getString("body_birth_date", null)) ?: LocalDate.now().minusYears(30)
+   DatePickerDialog(this, { _, year, month, day ->
+    val selected = LocalDate.of(year, month + 1, day)
+    birthDate.text = selected.format(DateTimeFormatter.ISO_LOCAL_DATE)
+   }, existing.year, existing.monthValue - 1, existing.dayOfMonth).apply {
+    datePicker.maxDate = System.currentTimeMillis()
+   }.show()
+  })
+  root.addView(birthDate)
   root.addView(label("Пол для алгоритма BIA", 12f))
   val gender = Spinner(this).apply {
    adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Мужской", "Женский"))
@@ -316,14 +332,16 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Сохранить") {
    val h = height.text.toString().replace(',', '.').toFloatOrNull()
    val w = weight.text.toString().replace(',', '.').toFloatOrNull()
-   val a = age.text.toString().toIntOrNull()
+   val birthday = parseBirthDate(birthDate.text.toString())
+   val a = birthday?.let { Period.between(it, LocalDate.now()).years }
    if (h == null || h !in 100f..250f || w == null || w !in 20f..300f || a == null || a !in 18..120) {
-    notice.text = "Проверь данные: рост 100–250 см, вес 20–300 кг, возраст 18–120"
+    notice.text = "Проверь данные: рост 100–250 см, вес 20–300 кг, дата рождения (возраст 18–120 лет)"
    } else {
     prefs.edit()
      .putString("body_height", h.toString())
      .putString("body_weight", w.toString())
-     .putString("body_age", a.toString())
+     .putString("body_birth_date", birthday.toString())
+     .remove("body_age")
      .putInt("body_gender", if (gender.selectedItemPosition == 0) 1 else 0)
      .apply()
     notice.text = "Сохранено"
@@ -889,10 +907,14 @@ class MainActivity : Activity(), SensorEventListener {
   }
   refresh()
  }
+ private fun parseBirthDate(value: String?): LocalDate? = try {
+  value?.let { LocalDate.parse(it, DateTimeFormatter.ISO_LOCAL_DATE) }
+ } catch (_: DateTimeParseException) { null }
  private fun bodyProfile(): SamsungTrackerProbe.BodyProfile? {
   val h = prefs.getString("body_height", null)?.toFloatOrNull() ?: return null
   val w = prefs.getString("body_weight", null)?.toFloatOrNull() ?: return null
-  val a = prefs.getString("body_age", null)?.toIntOrNull() ?: return null
+  val birthday = parseBirthDate(prefs.getString("body_birth_date", null)) ?: return null
+  val a = Period.between(birthday, LocalDate.now()).years
   if (h !in 100f..250f || w !in 20f..300f || a !in 18..120) return null
   return SamsungTrackerProbe.BodyProfile(h, w, prefs.getInt("body_gender", 1), a)
  }
