@@ -110,37 +110,117 @@ class MainActivity : Activity(), SensorEventListener {
   cell.addView(value)
   return cell to value
  }
+ private val homeHandler = Handler(Looper.getMainLooper())
+ private var pendingHomeTap: Runnable? = null
+ private var pulseAnimating = false
+ private var pulseLabel: TextView? = null
+ private var oxygenLabel: TextView? = null
+ private var homePulseButton: Button? = null
+ private var homeOxygenButton: Button? = null
+ private fun homeTap(kind: String, single: () -> Unit) {
+  val pending = pendingHomeTap
+  if (pending != null) {
+   homeHandler.removeCallbacks(pending)
+   pendingHomeTap = null
+   if (kind == lastHomeTapKind) {
+    if (kind == "heart") pulseAnimating = false
+    showJournal(kind)
+   } else single()
+  } else {
+   lastHomeTapKind = kind
+   val task = Runnable { pendingHomeTap = null; single() }
+   pendingHomeTap = task
+   homeHandler.postDelayed(task, 320L)
+  }
+ }
+ private var lastHomeTapKind = ""
+ private fun saveVital(kind: String, value: Int) {
+  val key = "vital_history_$kind"
+  val old = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+  if (old.length() > 0 && old.optJSONObject(0)?.optInt("value") == value &&
+      System.currentTimeMillis() - (old.optJSONObject(0)?.optLong("time") ?: 0L) < 60_000L) return
+  val updated = JSONArray().put(JSONObject().put("time", System.currentTimeMillis()).put("value", value))
+  for (i in 0 until minOf(old.length(), 49)) updated.put(old.get(i))
+  prefs.edit().putString(key, updated.toString()).apply()
+ }
+ private fun startHomeHeart() {
+  pulseAnimating = true
+  homePulseButton?.text = "♥  Измерение…"
+  startSensors()
+  val sensor = manager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+  if (sensor == null) { pulseAnimating = false; homePulseButton?.text = "♥ Нет датчика"; return }
+  val started = SystemClock.elapsedRealtime()
+  val animation = object : Runnable {
+   var beat = false
+   override fun run() {
+    if (!pulseAnimating || screen != "home") return
+    beat = !beat
+    homePulseButton?.text = if (beat) "♥  ♥" else "♥"
+    if (SystemClock.elapsedRealtime() - started < 15_000L) homeHandler.postDelayed(this, 500L)
+    else { pulseAnimating = false; homePulseButton?.text = "♥" }
+   }
+  }
+  homeHandler.post(animation)
+ }
  private fun showHome() {
   screen = "home"; heartValue = null; stepsValue = null
-  val root = page()
-  root.addView(label("Watch Bridge", 13f).apply { typeface = Typeface.DEFAULT_BOLD })
+  pulseAnimating = false
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("Watch Bridge", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
-  actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
+  val heartColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+  val oxygenColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+  homePulseButton = button("♥") { homeTap("heart") { startHomeHeart() } }
+  homeOxygenButton = button("O₂") { homeTap("oxygen") { startHomeOxygen() } }
+  heartColumn.addView(homePulseButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+  oxygenColumn.addView(homeOxygenButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+  pulseLabel = label("Последний: " + (prefs.getString("last_heart", null) ?: "—"), 10f)
+  oxygenLabel = label("Последний: " + (prefs.getString("last_oxygen", null) ?: "—"), 10f)
+  heartColumn.addView(pulseLabel)
+  oxygenColumn.addView(oxygenLabel)
+  actions.addView(heartColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
+  actions.addView(oxygenColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
   root.addView(actions)
   val first = LinearLayout(this)
   val second = LinearLayout(this)
   val heartTile = tile("♥ Пульс", heart?.toInt()?.toString() ?: "—") { showJournal("heart") }
-  val oxygenTile = tile("O₂ Кислород", "—") { showJournal("oxygen") }
+  val oxygenTile = tile("O₂ Кислород", prefs.getString("last_oxygen", "—") ?: "—") { showJournal("oxygen") }
   val stepsTile = tile("♟ Шаги", steps?.toInt()?.toString() ?: "—") { showJournal("steps") }
   val sleepTile = tile("☾ Сон", "—") { showJournal("sleep") }
   heartValue = heartTile.second; stepsValue = stepsTile.second
   for ((row, cell) in listOf(first to heartTile.first, first to oxygenTile.first, second to stepsTile.first, second to sleepTile.first)) {
-   row.addView(cell, LinearLayout.LayoutParams(0, dp(76), 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
+   row.addView(cell, LinearLayout.LayoutParams(0, dp(70), 1f).apply { setMargins(dp(4), dp(3), dp(4), dp(3)) })
   }
   root.addView(first); root.addView(second)
-  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
+  val measurements = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  measurements.addView(button("BIA") { showMeasurement("BIA") }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  measurements.addView(button("ЭКГ") { showMeasurement("ECG") }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  root.addView(measurements)
+  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
   showPage(root)
+ }
+ private fun startHomeOxygen() {
+  homeOxygenButton?.text = "O₂ …"
+  startSpO2Measurement()
  }
  private fun showJournal(kind: String) {
   screen = kind
-  val root = page()
+  val root = page().apply { setPadding(dp(12), dp(2), dp(12), dp(12)) }
+  root.addView(button("← Назад") { showHome() })
   val title = when(kind) { "heart" -> "История пульса"; "oxygen" -> "История кислорода"; "steps" -> "История шагов"; else -> "История сна" }
-  root.addView(label(title, 19f))
-  root.addView(label("Исторические записи пока не подключены. Данные не выдумываются.", 13f))
-  if (kind == "heart") root.addView(label("Сейчас: ${heart?.toInt()?.toString() ?: "—"} bpm"))
-  if (kind == "steps") root.addView(label("Счётчик с перезагрузки: ${steps?.toInt()?.toString() ?: "—"}"))
-  root.addView(button("Назад") { showHome() })
+  root.addView(label(title, 17f))
+  if (kind == "heart" || kind == "oxygen") {
+   val history = try { JSONArray(prefs.getString("vital_history_$kind", "[]")) } catch (_: Exception) { JSONArray() }
+   if (history.length() == 0) root.addView(label("Измерений пока нет", 12f))
+   for (i in 0 until history.length()) {
+    val entry = history.optJSONObject(i) ?: continue
+    val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(entry.optLong("time")))
+    root.addView(label("$date   ${entry.optInt("value")} " + if (kind == "heart") "уд/мин" else "%", 12f))
+   }
+  } else root.addView(label("История пока не подключена", 12f))
   showPage(root)
  }
  private fun showSettings() {
@@ -638,6 +718,13 @@ class MainActivity : Activity(), SensorEventListener {
     val result = publishSpO2FromProbe(message)
     if (result != null) {
      spo2Result = result
+     val oxygen = Regex("SpO₂: (\\d+)%").find(result)?.groupValues?.get(1)?.toIntOrNull()
+     if (oxygen != null) {
+      prefs.edit().putString("last_oxygen", "$oxygen%").apply()
+      saveVital("oxygen", oxygen)
+      oxygenLabel?.text = "Последний: $oxygen%"
+      homeOxygenButton?.text = "O₂"
+     }
      measurementMessage = "Измерение завершено"
      measurementPreview = result
      measurementProgress = 100
@@ -1100,7 +1187,14 @@ class MainActivity : Activity(), SensorEventListener {
   when (event.sensor.type) {
    Sensor.TYPE_HEART_RATE -> {
     val bpm = event.values[0]
-    if (bpm.isFinite() && bpm > 0f) heart = bpm
+    if (bpm.isFinite() && bpm in 25f..240f) {
+     heart = bpm
+     if (pulseAnimating && screen == "home") {
+      prefs.edit().putString("last_heart", "${bpm.toInt()} уд/мин").apply()
+      saveVital("heart", bpm.toInt())
+      pulseLabel?.text = "Последний: ${bpm.toInt()} уд/мин"
+     }
+    }
    }
    Sensor.TYPE_STEP_COUNTER -> steps = event.values[0]
   }
