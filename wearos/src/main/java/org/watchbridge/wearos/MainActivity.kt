@@ -18,6 +18,9 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
+import android.content.ContentValues
+import android.provider.MediaStore
+import android.os.Environment
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.os.IBinder
@@ -480,6 +483,34 @@ class MainActivity : Activity(), SensorEventListener {
   root.addView(button("Назад") { showMeasurement("ECG") })
   showPage(root)
  }
+ private fun exportEcgCsv(file: String, status: TextView) {
+  if (!Regex("^ecg_[0-9]+\\.csv$").matches(file)) {
+   status.text = "Недопустимое имя записи"
+   return
+  }
+  var uri: Uri? = null
+  try {
+   val values = ContentValues().apply {
+    put(MediaStore.MediaColumns.DISPLAY_NAME, file)
+    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/WatchBridge")
+    put(MediaStore.MediaColumns.IS_PENDING, 1)
+   }
+   uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+    ?: throw IllegalStateException("Не удалось создать файл в Downloads")
+   val destination = uri
+   contentResolver.openOutputStream(destination)?.use { output ->
+    openFileInput(file).use { input -> input.copyTo(output) }
+   } ?: throw IllegalStateException("Не удалось открыть файл для записи")
+   contentResolver.update(destination, ContentValues().apply {
+    put(MediaStore.MediaColumns.IS_PENDING, 0)
+   }, null, null)
+   status.text = "Экспортировано: Download/WatchBridge/$file"
+  } catch (e: Exception) {
+   uri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) {} }
+   status.text = "Ошибка экспорта: ${e.message ?: e.javaClass.simpleName}"
+  }
+ }
  private fun showEcgRecording(file: String, date: String) {
   val values = try {
    openFileInput(file).bufferedReader().useLines { lines ->
@@ -518,6 +549,9 @@ class MainActivity : Activity(), SensorEventListener {
   }, LinearLayout.LayoutParams(0, dp(40), 1f))
   root.addView(nav)
   root.addView(button("Фильтр: вкл/выкл") { filtered = !filtered; redraw() })
+  val exportStatus = label("", 11f)
+  root.addView(button("Экспорт CSV в Downloads") { exportEcgCsv(file, exportStatus) })
+  root.addView(exportStatus)
   root.addView(label("Фильтр только для просмотра. CSV содержит исходный сигнал.", 11f))
   root.addView(button("Назад") { showEcgHistory() })
   showPage(root)
