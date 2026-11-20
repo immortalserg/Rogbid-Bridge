@@ -357,7 +357,7 @@ class MainActivity : Activity(), SensorEventListener {
   ecgWaveform?.clear()
   ecgSessionId++
   ecgRecording = true
-  ecgStartedAt = 0L // Wait for one second of continuous valid electrode contact.
+  ecgStartedAt = 0L // Wait for five seconds of continuous valid electrode contact.
   ecgContactSince = 0L
   ecgContactLost = false
   ecgLastUiAt = 0L
@@ -374,7 +374,7 @@ class MainActivity : Activity(), SensorEventListener {
   if (ecgStartedAt == 0L) {
    if (contact == 0) {
     if (ecgContactSince == 0L) ecgContactSince = now
-    if (now - ecgContactSince >= 1000L) {
+    if (now - ecgContactSince >= 5000L) {
      ecgStartedAt = now
      ecgLastUiAt = 0L
      ecgLastRenderedSample = 0
@@ -395,7 +395,9 @@ class MainActivity : Activity(), SensorEventListener {
       if (ecgRecording && ecgStartedAt == 0L && screen == "measurement") {
        measurementProgress = 0
        measurementMessage = if (contact == 0) "Проверка контакта электрода…" else "Прикоснись пальцем к электроду"
-       measurementPreview = "Отсчёт начнётся после 1 секунды устойчивого контакта"
+       measurementPreview = if (contact == 0 && ecgContactSince != 0L)
+        "Стабилизация сигнала: ${((now - ecgContactSince) / 1000L).coerceIn(0L, 5L)} из 5 с"
+       else "Отсчёт начнётся после 5 секунд устойчивого контакта"
        updateMeasurementUi()
       }
      }
