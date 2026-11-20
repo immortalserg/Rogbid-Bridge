@@ -28,18 +28,13 @@ class SyncService : Service() {
  private val sleepSchedule = object : Runnable {
   override fun run() {
    if (!running) return
-   val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-   if (hour < 10) {
-    sleepBeforeRequest = try { SleepCollector(this@SyncService).read()?.let { snapshotKey(it) } }
-     catch (e: Exception) { android.util.Log.w("RogbidSleep", "Baseline read failed", e); null }
-    sleepRequestDate = today()
-    val generation = ++sleepPollGeneration
-    android.util.Log.i("RogbidSleep", "Requesting sleep for ${sleepRequestDate}")
-    sendBroadcast(Intent("com.wiite.get.sleep.data"))
-    handler.postDelayed({ pollSleep(generation) }, 3000L)
-   } else {
-    android.util.Log.d("RogbidSleep", "Sleep polling paused after 10:00")
-   }
+   sleepBeforeRequest = try { SleepCollector(this@SyncService).read()?.let { snapshotKey(it) } }
+    catch (e: Exception) { android.util.Log.w("RogbidSleep", "Baseline read failed", e); null }
+   sleepRequestDate = today()
+   val generation = ++sleepPollGeneration
+   android.util.Log.i("RogbidSleep", "Requesting sleep for ${sleepRequestDate}")
+   sendBroadcast(Intent("com.wiite.get.sleep.data"))
+   handler.postDelayed({ pollSleep(generation) }, 3000L)
    if (running) handler.postDelayed(this, sleepIntervalMs)
   }
  }
@@ -112,10 +107,28 @@ class SyncService : Service() {
  private val sleepReceiver = object : BroadcastReceiver() {
   override fun onReceive(context: Context?, intent: Intent?) {
    if (intent?.action != "com.wiite.sleep.data" || !running) return
-   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received")
-   val generation = sleepPollGeneration
-   if (sleepRequestDate == today())
-    handler.postDelayed({ pollSleep(generation) }, 2000L)
+   // Log metadata only: never dump sleep history or raw broadcast payloads.
+   val extras = intent.extras
+   val summary = extras?.keySet()?.sorted()?.joinToString { key ->
+    val value = try { extras.get(key) } catch (e: Exception) { null }
+    "$key:${value?.javaClass?.simpleName ?: "null"}"
+   } ?: "none"
+   val rawSleep = intent.getByteArrayExtra("data")
+   android.util.Log.i("RogbidSleep", "Vendor sleep broadcast received; extras=$summary; dataBytes=${rawSleep?.size ?: 0}")
+   if (rawSleep != null) {
+    val hex = rawSleep.take(36).joinToString(" ") {
+     "%02X".format(it.toInt() and 0xFF)
+    }
+    android.util.Log.i("RogbidSleep", "Raw sleep bytes: $hex")
+    val decoded = VendorSleepDecoder.decode(rawSleep)
+    android.util.Log.i("RogbidSleep",
+     "Raw sleep diagnostic: points=${decoded?.points?.size ?: 0} " +
+     "code=${decoded?.code} first=${decoded?.firstSleep} " +
+     "wake=${decoded?.lastWake} duration=${decoded?.durationMinutes} " +
+     "stageMinutes=${decoded?.stageMinutes}")
+   }
+   // The scheduled retry chain already checks the provider. Starting another
+   // chain here caused duplicate attempts every three seconds.
   }
  }
  private fun intervalMs(): Long = getSharedPreferences("mqtt", MODE_PRIVATE)
@@ -139,6 +152,7 @@ class SyncService : Service() {
  }
  override fun onCreate() {
   super.onCreate()
+  BootDiagnosticJob.schedule(this)
   L10n.init(this)
   worker.start()
   handler = Handler(worker.looper)
@@ -156,6 +170,13 @@ class SyncService : Service() {
   startForeground(1001, notification)
   registerReceiver(sleepReceiver, IntentFilter("com.wiite.sleep.data"))
   sleepReceiverRegistered = true
+  // BLE transport is independent of MQTT publishing and stays available while
+  // the foreground synchronization service is alive.
+  try {
+   startService(Intent(this, BleGattService::class.java))
+  } catch (e: Exception) {
+   android.util.Log.w("WatchBridgeBLE", "Cannot start BLE GATT service", e)
+  }
  }
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   if (intent?.action == "STOP") {
