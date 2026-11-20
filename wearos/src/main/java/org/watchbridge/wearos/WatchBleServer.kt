@@ -18,12 +18,15 @@ import java.util.UUID
 class WatchBleServer(private val context: Context, private val report: (String) -> Unit) {
  companion object {
   val SERVICE_UUID: UUID = UUID.fromString("f3e9b8c0-4471-4a42-a14b-6f2f7a91c001")
+  val JOURNAL_UUID: UUID = UUID.fromString("f3e9b8c0-4471-4a42-a14b-6f2f7a91c003")
   val DATA_UUID: UUID = UUID.fromString("f3e9b8c0-4471-4a42-a14b-6f2f7a91c002")
   private val CCC_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
  }
  private val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
  private var server: BluetoothGattServer? = null
  private var dataCharacteristic: BluetoothGattCharacteristic? = null
+ private var journalCharacteristic: BluetoothGattCharacteristic? = null
+ @Volatile private var latestJournal: ByteArray = byteArrayOf()
  private var advertiser: android.bluetooth.le.BluetoothLeAdvertiser? = null
  private val subscribers = mutableSetOf<String>()
  private var latest: ByteArray = byteArrayOf()
@@ -32,11 +35,11 @@ class WatchBleServer(private val context: Context, private val report: (String) 
    if (newState == BluetoothProfile.STATE_DISCONNECTED) synchronized(subscribers) { subscribers.remove(device.address) }
   }
   override fun onCharacteristicReadRequest(device: BluetoothDevice, requestId: Int, offset: Int, characteristic: BluetoothGattCharacteristic) {
-   if (characteristic.uuid != DATA_UUID) {
+   if (characteristic.uuid != DATA_UUID && characteristic.uuid != JOURNAL_UUID) {
     server?.sendResponse(device, requestId, BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, offset, null)
     return
    }
-   val bytes = latest
+   val bytes = if (characteristic.uuid == JOURNAL_UUID) latestJournal else latest
    if (offset > bytes.size) server?.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_OFFSET, offset, null)
    else server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, bytes.copyOfRange(offset, bytes.size))
   }
@@ -81,6 +84,13 @@ class WatchBleServer(private val context: Context, private val report: (String) 
     BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE))
    val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
    service.addCharacteristic(characteristic)
+   val journal = BluetoothGattCharacteristic(JOURNAL_UUID,
+    BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+    BluetoothGattCharacteristic.PERMISSION_READ)
+   journal.addDescriptor(BluetoothGattDescriptor(CCC_UUID,
+    BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE))
+   service.addCharacteristic(journal)
+   journalCharacteristic = journal
    server = gatt
    dataCharacteristic = characteristic
    if (!gatt.addService(service)) { report("GATT addService failed"); stop(); return }
@@ -120,12 +130,32 @@ class WatchBleServer(private val context: Context, private val report: (String) 
   }
   report("BLE updated SpO2=$spo2 pulse=$pulse")
  }
+ fun publishJournal(json: String) {
+  latestJournal = json.toByteArray(Charsets.UTF_8)
+  val gatt = server ?: return
+  val characteristic = journalCharacteristic ?: return
+  val clients = try { manager.getConnectedDevices(BluetoothProfile.GATT) } catch (_: Exception) { return }
+  val targets = synchronized(subscribers) { subscribers.toSet() }
+  for (device in clients) if (device.address in targets) {
+   try {
+    val signal = byteArrayOf(1)
+    if (Build.VERSION.SDK_INT >= 33) gatt.notifyCharacteristicChanged(device, characteristic, false, signal)
+    else {
+     @Suppress("DEPRECATION")
+     characteristic.value = signal
+     @Suppress("DEPRECATION")
+     gatt.notifyCharacteristicChanged(device, characteristic, false)
+    }
+   } catch (e: Exception) { Log.w("WatchBridgeBLE", "Journal notify failed", e) }
+  }
+ }
  fun stop() {
   try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) {}
   advertiser = null
   try { server?.close() } catch (_: Exception) {}
   server = null
   dataCharacteristic = null
+  journalCharacteristic = null
   synchronized(subscribers) { subscribers.clear() }
  }
 }
