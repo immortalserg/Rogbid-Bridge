@@ -29,6 +29,20 @@ SENSORS = (
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][entry.entry_id]
+    if runtime.get("ble"):
+        from .ble_drivers.entities import BLE_HEART_RATE, BleWatchSensor
+        async_add_entities([
+            BleWatchSensor(
+                entry.data[CONF_DEVICE_ID],
+                entry.data.get("ble_name", "BLE heart-rate device"),
+                "Bluetooth SIG",
+                "Heart Rate Service",
+                BLE_HEART_RATE,
+                runtime["state"],
+                f"{DOMAIN}_{entry.entry_id}_update",
+            )
+        ], True)
+        return
     entities = [
         RogbidSensor(entry, description, runtime["state"])
         for description in SENSORS
