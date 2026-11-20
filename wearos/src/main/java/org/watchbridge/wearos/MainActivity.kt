@@ -430,11 +430,57 @@ class MainActivity : Activity(), SensorEventListener {
   for (i in 0 until history.length()) {
    val item = history.optJSONObject(i) ?: continue
    val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(item.optLong("timestamp")))
-   root.addView(label("$date · ${item.optLong("durationMs") / 1000} с · ${item.optInt("samples")} отсчётов", 12f))
+   val file = item.optString("file")
+   root.addView(button("$date · ${item.optLong("durationMs") / 1000} с · ${item.optInt("samples")} отсчётов") {
+    showEcgRecording(file, date)
+   })
   }
-  root.addView(label("Исходные отсчёты сохранены в CSV во внутренней памяти часов.", 11f))
+  root.addView(label("Исходные отсчёты хранятся в CSV на часах.", 11f))
   root.addView(button("Назад") { showMeasurement("ECG") })
   showPage(root)
+ }
+ private fun showEcgRecording(file: String, date: String) {
+  val values = try {
+   openFileInput(file).bufferedReader().useLines { lines ->
+    lines.drop(1).mapNotNull { it.split(',').getOrNull(1)?.toFloatOrNull() }.take(30000).toList()
+   }
+  } catch (e: Exception) {
+   screen = "ecg_details"
+   val error = page()
+   error.addView(label("Не удалось открыть ЭКГ: ${e.message}", 12f))
+   error.addView(button("Назад") { showEcgHistory() })
+   showPage(error)
+   return
+  }
+  screen = "ecg_details"
+  val root = page()
+  root.addView(label(date, 15f))
+  root.addView(label("ЭКГ · запись ${values.size} отсчётов", 12f))
+  val waveform = EcgWaveformView(this)
+  root.addView(waveform, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(145)))
+  val position = label("", 12f)
+  root.addView(position)
+  var startSample = 0
+  var filtered = true
+  fun redraw() {
+   waveform.setFilterEnabled(filtered)
+   waveform.setRecording(values.drop(startSample).take(1500))
+   position.text = "${startSample / 500}–${minOf(values.size, startSample + 1500) / 500} с · " +
+    if (filtered) "Фильтр включён" else "Без фильтра"
+  }
+  val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  nav.addView(button("◀ 3 с") { startSample = (startSample - 1500).coerceAtLeast(0); redraw() },
+   LinearLayout.LayoutParams(0, dp(40), 1f))
+  nav.addView(button("3 с ▶") {
+   startSample = (startSample + 1500).coerceAtMost(((values.size - 1) / 1500 * 1500).coerceAtLeast(0))
+   redraw()
+  }, LinearLayout.LayoutParams(0, dp(40), 1f))
+  root.addView(nav)
+  root.addView(button("Фильтр: вкл/выкл") { filtered = !filtered; redraw() })
+  root.addView(label("Фильтр только для просмотра. CSV содержит исходный сигнал.", 11f))
+  root.addView(button("Назад") { showEcgHistory() })
+  showPage(root)
+  redraw()
  }
  private fun biaField(message: String, name: String): Float? =
   Regex("(?:^|\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\.[0-9]+)?)")
