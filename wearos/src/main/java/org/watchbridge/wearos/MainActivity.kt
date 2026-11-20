@@ -330,7 +330,7 @@ class MainActivity : Activity(), SensorEventListener {
   updateMeasurementUi()
  }
  private fun biaField(message: String, name: String): Float? =
-  Regex("(?:^|\\\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\\\.[0-9]+)?)")
+  Regex("(?:^|\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\.[0-9]+)?)")
    .find(message)?.groupValues?.get(1)?.toFloatOrNull()
  private fun formatBia(value: Float?, unit: String): String =
   if (value != null && value.isFinite()) String.format(Locale.getDefault(), "%.1f %s", value, unit) else "—"
@@ -345,7 +345,7 @@ class MainActivity : Activity(), SensorEventListener {
    Triple("Базовый обмен", "bmr", "ккал/сут"),
    Triple("Импеданс", "impedanceMagnitude", "Ом")
   )
-  return fields.joinToString("\\n") { (title, key, unit) ->
+  return fields.joinToString("\n") { (title, key, unit) ->
    "$title: ${formatBia(biaField(message, key), unit)}"
   }
  }
@@ -382,7 +382,7 @@ class MainActivity : Activity(), SensorEventListener {
      Triple("Безжировая масса", "fatFreeMass", "кг"),
      Triple("Базовый обмен", "bmr", "ккал/сут"),
      Triple("Импеданс", "impedanceMagnitude", "Ом")
-    ).joinToString("\\n") { (title, key, unit) ->
+    ).joinToString("\n") { (title, key, unit) ->
      "$title: ${formatBia(if (entry.has(key)) entry.optDouble(key).toFloat() else null, unit)}"
     }
     details.addView(label(lines, 13f))
@@ -545,8 +545,8 @@ class MainActivity : Activity(), SensorEventListener {
     val progress = Regex("progress=([0-9.]+)").find(message)?.groupValues?.get(1)?.toFloatOrNull()
     runOnUiThread {
      if (generation != trackerTestGeneration) return@runOnUiThread
-     if (status != null) measurementMessage = biaMessage(status)
-     if (status == 0 && progress != null) {
+     if (status != null && !biaSavedForRun) measurementMessage = biaMessage(status)
+     if (status == 0 && progress != null && !biaSavedForRun) {
       measurementProgress = (progress * 100f).toInt().coerceIn(0, 100)
       if (measurementProgress >= 100) {
        measurementMessage = "Измерение завершено"
