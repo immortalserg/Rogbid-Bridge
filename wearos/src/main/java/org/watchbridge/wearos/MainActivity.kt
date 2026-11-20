@@ -577,7 +577,7 @@ class MainActivity : Activity(), SensorEventListener {
    } else if (message.contains("failed", true) || message.contains("error", true) ||
               message.contains("timeout", true) || message.contains("bindService returned false")) {
     runOnUiThread {
-     if (generation == trackerTestGeneration) {
+     if (generation == trackerTestGeneration && !(tracker == "BIA" && biaSavedForRun)) {
       measurementMessage = "Ошибка: " + message.take(100)
       updateMeasurementUi()
      }
