@@ -274,6 +274,7 @@ class MainActivity : Activity(), SensorEventListener {
  private var ecgRecording = false
  private var ecgStartedAt = 0L
  private var ecgLastUiAt = 0L
+ private var ecgLastRenderedSample = 0
  private val ecgSamples = mutableListOf<Triple<Long, Float, Int>>()
  private val ecgHandler = Handler(Looper.getMainLooper())
  private fun showDiagnostics() {
@@ -354,6 +355,7 @@ class MainActivity : Activity(), SensorEventListener {
   ecgRecording = true
   ecgStartedAt = SystemClock.elapsedRealtime()
   ecgLastUiAt = 0L
+  ecgLastRenderedSample = 0
   measurementProgress = 0
   measurementMessage = "Прикоснись пальцем к электроду"
   measurementPreview = "Ожидание сигнала ЭКГ…"
@@ -374,7 +376,13 @@ class MainActivity : Activity(), SensorEventListener {
   ecgLastUiAt = now
   runOnUiThread {
    if (!ecgRecording || screen != "measurement" || activeTrackerName != "ECG") return@runOnUiThread
-   ecgWaveform?.append(value)
+   val batch = synchronized(ecgSamples) {
+    val start = ecgLastRenderedSample.coerceAtMost(ecgSamples.size)
+    val values = ecgSamples.subList(start, ecgSamples.size).map { it.second }
+    ecgLastRenderedSample = ecgSamples.size
+    values
+   }
+   ecgWaveform?.appendBatch(batch)
    measurementProgress = (elapsed / 300L).toInt().coerceIn(0, 100)
    measurementMessage = if (contact == 0) "Запись сигнала…" else "Проверь контакт электрода (код $contact)"
    measurementPreview = "Отсчётов: ${synchronized(ecgSamples) { ecgSamples.size }}"
