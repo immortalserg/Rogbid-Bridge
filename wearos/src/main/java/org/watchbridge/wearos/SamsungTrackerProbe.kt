@@ -14,8 +14,10 @@ import com.samsung.android.service.health.tracking.data.ServiceDataPoint
 class SamsungTrackerProbe(
  private val context: Context,
  private val trackerType: String = "SPO2",
+ private val bodyProfile: BodyProfile? = null,
  private val report: (String) -> Unit
 ) {
+ data class BodyProfile(val heightCm: Float, val weightKg: Float, val gender: Int, val age: Int)
  private val serviceDescriptor = "com.samsung.android.service.health.tracking.IClientEventListener"
  private val callbackDescriptor = "com.samsung.android.service.health.tracking.IServiceEventListener"
  private val appId = context.packageName
@@ -153,9 +155,16 @@ class SamsungTrackerProbe(
       transact(binder, 1) {
        it.writeString(appId)
        it.writeString(trackerType)
-       // Null profile uses Samsung's built-in BIA fallback values.
-       // Do not send a non-null profile with invalid negative measurements.
-       it.writeInt(0) // null TrackerUserProfile
+       val profile = if (trackerType == "BIA") bodyProfile else null
+       if (profile == null) {
+        it.writeInt(0) // null profile: Samsung fallback values
+       } else {
+        it.writeInt(1) // non-null Parcelable TrackerUserProfile
+        it.writeFloat(profile.heightCm)
+        it.writeFloat(profile.weightKg)
+        it.writeInt(profile.gender)
+        it.writeInt(profile.age)
+       }
        it.writeString(null) // exerciseType
       }
       if (!active) return@Thread
