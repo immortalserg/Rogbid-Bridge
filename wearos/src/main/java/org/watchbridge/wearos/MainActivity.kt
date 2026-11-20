@@ -378,35 +378,49 @@ class MainActivity : Activity(), SensorEventListener {
  }
  private fun showMeasurement(tracker: String) {
   screen = "measurement"
-  val root = page()
+  activeTrackerName = tracker
+  measurementProgress = 0
+  measurementMessage = ""
+  measurementPreview = ""
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
   val title = when (tracker) {
    "BIA" -> "Состав тела"
    "ECG" -> "ЭКГ"
    "SPO2" -> "Кислород"
    else -> "Пульс"
   }
-  root.addView(label(title, 19f))
-  if (tracker == "BIA") root.addView(label(if (bodyProfile() == null) "Сначала укажи параметры тела в настройках" else "Профиль BIA настроен", 11f))
-  progressLabel = label("0%", 24f).apply { typeface = Typeface.DEFAULT_BOLD }
+  root.addView(label(title, 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  if (tracker == "BIA" && bodyProfile() == null) {
+   root.addView(label("Укажи параметры тела в настройках", 11f))
+  }
+  progressLabel = label("0%", 24f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), dp(1), dp(2), dp(1))
+  }
   progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
    max = 100
    progress = 0
    progressTintList = android.content.res.ColorStateList.valueOf(skin().accent)
+   setPadding(0, 0, 0, 0)
   }
-  measurementStatus = label("Нажми «Начать»", 13f)
-  measurementResult = label("", 12f)
+  measurementStatus = label("", 13f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
+  measurementResult = label("", 12f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
   root.addView(progressLabel)
-  root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(12)).apply {
-   setMargins(dp(10), dp(5), dp(10), dp(8))
+  root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
+   setMargins(dp(10), 0, dp(10), dp(2))
   })
   root.addView(measurementStatus)
   root.addView(measurementResult)
   if (tracker == "ECG") {
    ecgWaveform = EcgWaveformView(this)
    root.addView(ecgWaveform, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(145)))
-   root.addView(label("30 секунд · сигнал ЭКГ (мВ) · без медицинской интерпретации", 11f))
+   root.addView(label("30 секунд · сигнал ЭКГ (мВ)", 11f))
   }
-  root.addView(button("Начать") {
+  val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  actions.addView(button("Начать") {
    measurementProgress = 0
    measurementMessage = "Ожидание данных датчика…"
    measurementPreview = ""
@@ -414,22 +428,24 @@ class MainActivity : Activity(), SensorEventListener {
    else if (tracker == "SPO2") startSpO2Measurement()
    else startSamsungTrackerTest(tracker)
    updateMeasurementUi()
-  })
-  if (tracker == "BIA") root.addView(button("История результатов") { stopSamsungTrackerTest(); showBiaHistory() })
-  if (tracker == "ECG") root.addView(button("Записи ЭКГ") { finishEcgRecording(); showEcgHistory() })
-  root.addView(button("Остановить") {
-   if (tracker == "ECG") finishEcgRecording() else stopSamsungTrackerTest()
-   measurementMessage = "Измерение остановлено"
-   updateMeasurementUi()
-  })
+  }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(2)) })
+  if (tracker == "BIA" || tracker == "ECG") {
+   actions.addView(button("История") {
+    if (tracker == "ECG") { if (ecgRecording) finishEcgRecording() else stopSamsungTrackerTest(); showEcgHistory() }
+    else { stopSamsungTrackerTest(); showBiaHistory() }
+   }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(2)) })
+  }
+  root.addView(actions)
   root.addView(button("Назад") {
-   if (tracker == "ECG") finishEcgRecording() else stopSamsungTrackerTest()
+   if (tracker == "ECG") {
+    if (ecgRecording) finishEcgRecording() else stopSamsungTrackerTest()
+   } else stopSamsungTrackerTest()
    progressBar = null
    progressLabel = null
    measurementStatus = null
    measurementResult = null
    ecgWaveform = null
-   showDiagnostics()
+   showHome()
   })
   showPage(root)
   updateMeasurementUi()
@@ -717,10 +733,9 @@ class MainActivity : Activity(), SensorEventListener {
     showPage(details)
    })
   }
-  root.addView(button("Назад") { showDiagnostics() })
+  root.addView(button("Назад") { showMeasurement("BIA") })
   showPage(root)
- }
- private fun updateMeasurementUi() {
+ }vate fun updateMeasurementUi() {
   if (screen != "measurement") return
   progressBar?.progress = measurementProgress
   progressLabel?.text = if (activeTrackerName == "BIA" || measurementProgress > 0) "$measurementProgress%" else "—"
