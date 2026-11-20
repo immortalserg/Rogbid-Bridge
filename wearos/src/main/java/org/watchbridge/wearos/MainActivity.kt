@@ -391,8 +391,8 @@ class MainActivity : Activity(), SensorEventListener {
    try {
     val fileName = "ecg_${System.currentTimeMillis()}.csv"
     openFileOutput(fileName, MODE_PRIVATE).bufferedWriter().use { writer ->
-     writer.write("timestamp,ecg_mv,lead_off\\n")
-     copy.forEach { (timestamp, mv, lead) -> writer.write("$timestamp,$mv,$lead\\n") }
+     writer.write("timestamp,ecg_mv,lead_off\n")
+     copy.forEach { (timestamp, mv, lead) -> writer.write("$timestamp,$mv,$lead\n") }
     }
     val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
     val item = JSONObject().put("file", fileName).put("timestamp", System.currentTimeMillis())
