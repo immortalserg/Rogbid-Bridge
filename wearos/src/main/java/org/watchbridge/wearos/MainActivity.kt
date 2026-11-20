@@ -132,7 +132,7 @@ class MainActivity : Activity(), SensorEventListener {
    homeHandler.removeCallbacks(pending)
    pendingHomeTap = null
    if (kind == lastHomeTapKind) {
-    if (kind == "heart") pulseAnimating = false
+    if (kind == "heart") stopHeartBlink() else if (kind == "oxygen") stopOxygenBlink()
     showJournal(kind)
    } else single()
   } else {
@@ -152,34 +152,65 @@ class MainActivity : Activity(), SensorEventListener {
   for (i in 0 until minOf(old.length(), 49)) updated.put(old.get(i))
   prefs.edit().putString(key, updated.toString()).apply()
  }
- private fun renderHeartButton(visible: Boolean = true) {
-  val value = prefs.getString("last_heart", null) ?: "—"
-  val content = SpannableString("♥  $value")
-  if (!visible) content.setSpan(ForegroundColorSpan(skin().tile), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-  else content.setSpan(ForegroundColorSpan(0xffff5577.toInt()), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-  homePulseButton?.text = content
+ private var oxygenAnimating = false
+ private var heartBeatGeneration = 0
+ private var oxygenBeatGeneration = 0
+ private fun renderHeartButton() {
+  homePulseButton?.text = "♥  " + (prefs.getString("last_heart", null) ?: "—")
+ }
+ private fun stopHeartBlink() {
+  pulseAnimating = false
+  heartBeatGeneration++
+  homePulseButton?.alpha = 1f
+  renderHeartButton()
+ }
+ private fun stopOxygenBlink() {
+  oxygenAnimating = false
+  oxygenBeatGeneration++
+  homeOxygenButton?.alpha = 1f
+  homeOxygenButton?.text = "O₂  " + (prefs.getString("last_oxygen", null) ?: "—")
  }
  private fun startHomeHeart() {
+  stopHeartBlink()
   pulseAnimating = true
   startSensors()
   val sensor = manager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
-  if (sensor == null) { pulseAnimating = false; homePulseButton?.text = "♥ Нет датчика"; return }
+  if (sensor == null) { stopHeartBlink(); homePulseButton?.text = "♥ Нет датчика"; return }
+  val generation = ++heartBeatGeneration
   val started = SystemClock.elapsedRealtime()
   val animation = object : Runnable {
-   var beat = false
+   var bright = false
    override fun run() {
-    if (!pulseAnimating || screen != "home") return
-    beat = !beat
-    renderHeartButton(beat)
-    if (SystemClock.elapsedRealtime() - started < 15_000L) homeHandler.postDelayed(this, 500L)
-    else { pulseAnimating = false; renderHeartButton(true) }
+    if (!pulseAnimating || screen != "home" || generation != heartBeatGeneration) return
+    if (SystemClock.elapsedRealtime() - started >= 15_000L) { stopHeartBlink(); return }
+    bright = !bright
+    homePulseButton?.alpha = if (bright) 1f else 0.35f
+    homeHandler.postDelayed(this, 350L)
+   }
+  }
+  homeHandler.post(animation)
+ }
+ private fun startOxygenBlink() {
+  stopOxygenBlink()
+  oxygenAnimating = true
+  val generation = ++oxygenBeatGeneration
+  val started = SystemClock.elapsedRealtime()
+  val animation = object : Runnable {
+   var bright = false
+   override fun run() {
+    if (!oxygenAnimating || screen != "home" || generation != oxygenBeatGeneration) return
+    if (SystemClock.elapsedRealtime() - started >= 45_000L) { stopOxygenBlink(); return }
+    bright = !bright
+    homeOxygenButton?.alpha = if (bright) 1f else 0.35f
+    homeHandler.postDelayed(this, 350L)
    }
   }
   homeHandler.post(animation)
  }
  private fun showHome() {
   screen = "home"; heartValue = null; stepsValue = null
-  pulseAnimating = false
+  stopHeartBlink()
+  stopOxygenBlink()
   val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
   root.addView(label("Watch Bridge", 13f).apply {
    typeface = Typeface.DEFAULT_BOLD
@@ -207,10 +238,12 @@ class MainActivity : Activity(), SensorEventListener {
   showPage(root)
  }
  private fun startHomeOxygen() {
-  homeOxygenButton?.text = "O₂  …"
+  startOxygenBlink()
   startSpO2Measurement()
  }
  private fun showJournal(kind: String) {
+  stopHeartBlink()
+  stopOxygenBlink()
   screen = kind
   val root = page().apply { setPadding(dp(12), dp(2), dp(12), dp(12)) }
   root.addView(button("← Назад") { showHome() })
@@ -796,12 +829,13 @@ class MainActivity : Activity(), SensorEventListener {
       prefs.edit().putString("last_oxygen", "$oxygen%").apply()
       saveVital("oxygen", oxygen)
 
-      homeOxygenButton?.text = "O₂  $oxygen%"
+      stopOxygenBlink()
      }
      measurementMessage = "Измерение завершено"
      measurementPreview = result
      measurementProgress = 100
     } else if (message.contains("failed", true) || message.contains("error", true) || message.contains("timeout", true)) {
+     stopOxygenBlink()
      measurementMessage = "Ошибка: " + message.take(90)
     }
     updateMeasurementUi()
