@@ -25,6 +25,8 @@ class SamsungTrackerProbe(
  @Volatile private var remote: IBinder? = null
  @Volatile private var active = false
  private var sampleCount = 0L
+ private val ecgFieldCounts = mutableMapOf<Int, Long>()
+ private var ecgLastLeadOff = -1
  private var lastSampleReportMs = 0L
  private var connection: ServiceConnection? = null
  private val callback = object : Binder() {
@@ -45,9 +47,17 @@ class SamsungTrackerProbe(
        if (trackerType != "SPO2") {
         val v = point.serviceValue
         sampleCount++
-        if (trackerType == "ECG" && v.size >= 6) {
-         try { ecgSample?.invoke(v[0].floatValue, v[2].integerValue, point.timeStamp) }
-         catch (e: Exception) { Log.w("WatchBridgeSamsung", "ECG sample callback failed", e) }
+        if (trackerType == "ECG") {
+         val previousCount = ecgFieldCounts[v.size] ?: 0L
+         ecgFieldCounts[v.size] = previousCount + 1L
+         if (previousCount == 0L) {
+          emit("ECG layout: fields=${v.size} firstSample=$sampleCount sizes=$ecgFieldCounts")
+         }
+         if (v.size >= 3) ecgLastLeadOff = v[2].integerValue
+         if (v.isNotEmpty()) {
+          try { ecgSample?.invoke(v[0].floatValue, ecgLastLeadOff, point.timeStamp) }
+          catch (e: Exception) { Log.w("WatchBridgeSamsung", "ECG sample callback failed", e) }
+         }
         }
         val message = when (trackerType) {
          "ECG" -> if (v.size >= 6) {
@@ -55,7 +65,9 @@ class SamsungTrackerProbe(
            "ecgMv=${v[0].floatValue} ppgGreen=${v[1].integerValue} " +
            "leadOff=${v[2].integerValue} sequence=${v[3].integerValue} " +
            "maxThresholdMv=${v[4].floatValue} minThresholdMv=${v[5].floatValue}"
-         } else "ECG unexpected field count=${v.size}"
+         } else if (v.isNotEmpty()) {
+          "ECG samples=$sampleCount t=${point.timeStamp} fields=${v.size} ecgMv=${v[0].floatValue} leadOff=$ecgLastLeadOff"
+         } else "ECG empty data point"
          "BIA" -> if (v.size >= 12) {
           "BIA samples=$sampleCount t=${point.timeStamp} " +
            "status=${v[0].integerValue} (${biaStatusName(v[0].integerValue)}) fatRatio=${v[1].floatValue} " +
@@ -149,6 +161,8 @@ class SamsungTrackerProbe(
   if (active) { emit("$trackerType probe already running"); return }
   active = true
   sampleCount = 0L
+  ecgFieldCounts.clear()
+  ecgLastLeadOff = -1
   lastSampleReportMs = 0L
   val conn = object : ServiceConnection {
    override fun onServiceConnected(name: ComponentName, binder: IBinder) {
