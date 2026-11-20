@@ -53,7 +53,7 @@ class SamsungTrackerProbe(
          if (previousCount == 0L) {
           emit("ECG layout: fields=${v.size} firstSample=$sampleCount sizes=$ecgFieldCounts")
          }
-         if (v.size >= 3) ecgLastLeadOff = v[2].integerValue
+         if (v.size >= 3 && v[2].integerValue >= 0) ecgLastLeadOff = v[2].integerValue
          if (v.isNotEmpty()) {
           try { ecgSample?.invoke(v[0].floatValue, ecgLastLeadOff, point.timeStamp) }
           catch (e: Exception) { Log.w("WatchBridgeSamsung", "ECG sample callback failed", e) }
