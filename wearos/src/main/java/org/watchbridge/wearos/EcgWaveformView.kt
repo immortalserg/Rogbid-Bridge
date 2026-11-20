@@ -16,16 +16,26 @@ class EcgWaveformView(context: Context) : View(context) {
  private val grid = Paint(1).apply { color = Color.rgb(90, 65, 75); alpha = 95; strokeWidth = 1f }
  private val line = Paint(1).apply { color = Color.rgb(93, 225, 147); strokeWidth = 2.2f; style = Paint.Style.STROKE }
  private val trace = Path()
+ private var baseline = 0f
+ private var smooth = 0f
+ private var initialized = false
+ private var filterEnabled = true
+ fun setFilterEnabled(enabled: Boolean) { filterEnabled = enabled; clear() }
+ fun setRecording(values: List<Float>) { clear(); appendBatch(values) }
  fun appendBatch(values: List<Float>) {
   values.forEach { value ->
    if (value.isFinite()) {
-    samples.addLast(value)
+    if (!initialized) { baseline = value; smooth = 0f; initialized = true }
+    // Approximate 500 Hz: 0.5 Hz high-pass, 40 Hz low-pass; display only.
+    baseline += 0.00626f * (value - baseline)
+    smooth += 0.335f * ((value - baseline) - smooth)
+    samples.addLast(if (filterEnabled) smooth else value)
     while (samples.size > capacity) samples.removeFirst()
    }
   }
   invalidate()
  }
- fun clear() { samples.clear(); invalidate() }
+ fun clear() { samples.clear(); initialized = false; baseline = 0f; smooth = 0f; invalidate() }
  override fun onDraw(canvas: Canvas) {
   super.onDraw(canvas)
   val w = width.toFloat()
