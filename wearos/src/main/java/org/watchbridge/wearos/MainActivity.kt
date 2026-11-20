@@ -581,8 +581,12 @@ class MainActivity : Activity(), SensorEventListener {
  }
  private fun showEcgHistory() {
   screen = "ecg_history"
-  val root = page()
-  root.addView(label("Записи ЭКГ", 18f))
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("История ЭКГ", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  root.addView(button("← Назад") { showMeasurement("ECG") })
   val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
   if (history.length() == 0) root.addView(label("Записей пока нет", 12f))
   for (i in 0 until history.length()) {
@@ -594,7 +598,6 @@ class MainActivity : Activity(), SensorEventListener {
    })
   }
   root.addView(label("Исходные отсчёты хранятся в CSV на часах.", 11f))
-  root.addView(button("Назад") { showMeasurement("ECG") })
   showPage(root)
  }
  private fun exportEcgCsv(file: String, status: TextView) {
@@ -706,16 +709,18 @@ class MainActivity : Activity(), SensorEventListener {
  }
  private fun showBiaHistory() {
   screen = "bia_history"
-  val root = page()
-  root.addView(label("История BIA", 18f))
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("История BIA", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  root.addView(button("← Назад") { showMeasurement("BIA") })
   val history = try { JSONArray(prefs.getString("bia_history", "[]")) } catch (_: Exception) { JSONArray() }
   if (history.length() == 0) root.addView(label("Завершённых измерений пока нет", 12f))
   for (i in 0 until history.length()) {
    val entry = history.optJSONObject(i) ?: continue
    val date = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(entry.optLong("timestamp")))
-   val fat = entry.optDouble("fatRatio", Double.NaN)
-   val fatText = if (fat.isFinite()) String.format(Locale.getDefault(), "%.1f%%", fat) else "—"
-   root.addView(button("$date · $fatText") {
+   root.addView(button(date) {
     val details = page()
     details.addView(label(date, 16f))
     val lines = listOf(
@@ -733,7 +738,6 @@ class MainActivity : Activity(), SensorEventListener {
     showPage(details)
    })
   }
-  root.addView(button("Назад") { showMeasurement("BIA") })
   showPage(root)
  }
  private fun updateMeasurementUi() {
