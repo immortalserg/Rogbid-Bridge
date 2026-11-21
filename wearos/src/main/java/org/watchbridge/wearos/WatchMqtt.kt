@@ -22,6 +22,7 @@ class WatchMqtt(private val context: Context, private val report: (String) -> Un
   val tls = prefs.getBoolean("mqtt_tls", true)
   if (host.isEmpty() || port !in 1..65535) { report("MQTT: неверный адрес или порт"); return }
   queue.execute {
+   var stage = "создание подключения"
    try {
     val uri = (if (tls) "ssl://" else "tcp://") + host + ":" + port
     if (uri != currentUri || client?.isConnected != true) {
@@ -36,17 +37,22 @@ class WatchMqtt(private val context: Context, private val report: (String) -> Un
       val password = prefs.getString("mqtt_password", "").orEmpty()
       if (password.isNotEmpty()) this.password = password.toCharArray()
      }
+     stage = "соединение с брокером"
      next.connect(opts)
      client = next
      currentUri = uri
      report("MQTT: подключено")
     }
     val base = "rogbid/$deviceId"
+    stage = "публикация $kind"
     client?.publish("$base/history/$kind", payload.toByteArray(Charsets.UTF_8), 1, false)
     report("MQTT: отправлено $kind")
    } catch (e: Exception) {
     Log.w("WatchBridgeMQTT", "Publish failed", e)
-    report("MQTT: ошибка ${e.javaClass.simpleName}")
+    val cause = generateSequence(e as Throwable?) { it.cause }.last()
+    val details = (cause.message ?: e.message ?: "нет описания").take(180)
+    report("MQTT [$stage]: ${e.javaClass.simpleName}: $details")
+    Log.e("WatchBridgeMQTT", "Stage=$stage, host=$host, port=$port, tls=$tls", e)
    }
   }
  }
