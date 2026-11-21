@@ -10,17 +10,24 @@ import android.os.Parcel
 import android.util.Log
 import com.samsung.android.service.health.tracking.data.ServiceDataPoint
 
-/** Experimental, read-only, one-shot Samsung Health Platform SpO2 probe. */
+/** Experimental, read-only Samsung Health Platform sensor probe. */
 class SamsungTrackerProbe(
  private val context: Context,
+ private val trackerType: String = "SPO2",
+ private val bodyProfile: BodyProfile? = null,
+ private val ecgSample: ((Float, Int, Long) -> Unit)? = null,
  private val report: (String) -> Unit
 ) {
+ data class BodyProfile(val heightCm: Float, val weightKg: Float, val gender: Int, val age: Int)
  private val serviceDescriptor = "com.samsung.android.service.health.tracking.IClientEventListener"
  private val callbackDescriptor = "com.samsung.android.service.health.tracking.IServiceEventListener"
  private val appId = context.packageName
- private val trackerType = "SPO2"
  @Volatile private var remote: IBinder? = null
  @Volatile private var active = false
+ private var sampleCount = 0L
+ private val ecgFieldCounts = mutableMapOf<Int, Long>()
+ private var ecgLastLeadOff = -1
+ private var lastSampleReportMs = 0L
  private var connection: ServiceConnection? = null
  private val callback = object : Binder() {
   init { attachInterface(null, callbackDescriptor) }
@@ -36,14 +43,64 @@ class SamsungTrackerProbe(
      1 -> {
       val points = data.createTypedArrayList(ServiceDataPoint.CREATOR).orEmpty()
       points.forEach { point ->
+       if (!active) return@forEach
+       if (trackerType != "SPO2") {
+        val v = point.serviceValue
+        sampleCount++
+        if (trackerType == "ECG") {
+         val previousCount = ecgFieldCounts[v.size] ?: 0L
+         ecgFieldCounts[v.size] = previousCount + 1L
+         if (previousCount == 0L) {
+          emit("ECG layout: fields=${v.size} firstSample=$sampleCount sizes=$ecgFieldCounts")
+         }
+         if (v.size >= 3 && v[2].integerValue >= 0) ecgLastLeadOff = v[2].integerValue
+         if (v.isNotEmpty()) {
+          try { ecgSample?.invoke(v[0].floatValue, ecgLastLeadOff, point.timeStamp) }
+          catch (e: Exception) { Log.w("WatchBridgeSamsung", "ECG sample callback failed", e) }
+         }
+        }
+        val message = when (trackerType) {
+         "ECG" -> if (v.size >= 6) {
+          "ECG samples=$sampleCount t=${point.timeStamp} " +
+           "ecgMv=${v[0].floatValue} ppgGreen=${v[1].integerValue} " +
+           "leadOff=${v[2].integerValue} sequence=${v[3].integerValue} " +
+           "maxThresholdMv=${v[4].floatValue} minThresholdMv=${v[5].floatValue}"
+         } else if (v.isNotEmpty()) {
+          "ECG samples=$sampleCount t=${point.timeStamp} fields=${v.size} ecgMv=${v[0].floatValue} leadOff=$ecgLastLeadOff"
+         } else "ECG empty data point"
+         "BIA" -> if (v.size >= 12) {
+          "BIA samples=$sampleCount t=${point.timeStamp} " +
+           "status=${v[0].integerValue} (${biaStatusName(v[0].integerValue)}) fatRatio=${v[1].floatValue} " +
+           "fatMass=${v[2].floatValue} bodyWater=${v[3].floatValue} " +
+           "muscleRatio=${v[4].floatValue} muscleMass=${v[5].floatValue} " +
+           "bmr=${v[6].floatValue} fatFreeRatio=${v[7].floatValue} " +
+           "fatFreeMass=${v[8].floatValue} progress=${v[9].floatValue} " +
+           "impedanceMagnitude=${v[10].floatValue} impedanceDegree=${v[11].floatValue}"
+         } else "BIA unexpected field count=${v.size}"
+         else -> {
+          val preview = v.take(12).mapIndexed { index, value ->
+           "$index=${value.integerValue}"
+          }.joinToString(", ")
+          "$trackerType samples=$sampleCount t=${point.timeStamp} n=${v.size} [$preview]"
+         }
+        }
+        // Avoid flooding the watch UI with high-rate ECG callbacks.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (sampleCount <= 3 || now - lastSampleReportMs >= 1000L ||
+            (trackerType == "BIA" && v.size >= 12 && v[0].integerValue == 0 && v[9].floatValue >= 1f)) {
+         lastSampleReportMs = now
+         emit(message)
+        }
+        return@forEach
+       }
        val v = point.serviceValue
        if (v.size >= 4) {
         val status = v[0].integerValue
         val spo2 = v[1].integerValue
         val pulse = v[2].integerValue
         val accuracy = v[3].integerValue
-        emit("SpO2 status=$status value=$spo2 pulse=$pulse accuracy=$accuracy timestamp=${point.timeStamp}")
-        if (status == 2 || status == 3 || status == -6) Thread { stop() }.start()
+        emit("$trackerType status=$status value=$spo2 pulse=$pulse accuracy=$accuracy timestamp=${point.timeStamp}")
+        if (trackerType == "SPO2" && (status == 2 || status == 3 || status == -6)) Thread { stop() }.start()
        } else emit("SpO2 point: unexpected values count=${v.size}")
       }
      }
@@ -60,6 +117,28 @@ class SamsungTrackerProbe(
    }
    return true
   }
+ }
+ private fun biaStatusName(status: Int): String = when (status) {
+  0 -> "NONE"
+  1 -> "RESERVED1"
+  2 -> "NV_NG"
+  3 -> "RESERVED2"
+  4 -> "WRIST_DETACH"
+  5 -> "RESERVED3"
+  6 -> "RESERVED4"
+  7 -> "FINGER_2H_DETACH"
+  8 -> "FINGER_4H_DETACH"
+  9 -> "FINGER_ALL_DETACH"
+  10 -> "WRIST_LOOSE"
+  11 -> "FINGER_DRY"
+  12 -> "RESERVED5"
+  13 -> "BODY_MAGNITUDE_NG"
+  14 -> "TWO_HAND_CONTACT"
+  15 -> "SUS_FRAME_CONTACT"
+  16 -> "RESERVED6"
+  17 -> "UNSTABLE_IMPEDANCE"
+  18 -> "BFR_OUTAGE"
+  else -> "UNKNOWN"
  }
  private fun emit(message: String) {
   Log.i("WatchBridgeSamsung", message)
@@ -79,40 +158,53 @@ class SamsungTrackerProbe(
   }
  }
  @Synchronized fun start() {
-  if (active) { emit("SpO2 probe already running"); return }
+  if (active) { emit("$trackerType probe already running"); return }
   active = true
+  sampleCount = 0L
+  ecgFieldCounts.clear()
+  ecgLastLeadOff = -1
+  lastSampleReportMs = 0L
   val conn = object : ServiceConnection {
    override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+    if (!active) return
     remote = binder
     Thread {
      try {
-      emit("SpO2: creating tracker")
+      if (!active) return@Thread
+      emit("$trackerType: creating tracker")
       transact(binder, 1) {
        it.writeString(appId)
        it.writeString(trackerType)
-       it.writeInt(1) // non-null TrackerUserProfile
-       it.writeFloat(-1f) // height
-       it.writeFloat(-1f) // weight
-       it.writeInt(-1) // gender
-       it.writeInt(-1) // age
+       val profile = if (trackerType == "BIA") bodyProfile else null
+       if (profile == null) {
+        it.writeInt(0) // null profile: Samsung fallback values
+       } else {
+        it.writeInt(1) // non-null Parcelable TrackerUserProfile
+        it.writeFloat(profile.heightCm)
+        it.writeFloat(profile.weightKg)
+        it.writeInt(profile.gender)
+        it.writeInt(profile.age)
+       }
        it.writeString(null) // exerciseType
       }
-      emit("SpO2: registering listener")
+      if (!active) return@Thread
+      emit("$trackerType: registering listener")
       transact(binder, 2) {
        it.writeString(appId)
        it.writeString(trackerType)
        it.writeStrongBinder(callback)
       }
-      emit("SpO2: waiting for measurements (60 seconds maximum)")
+      if (!active) { stop(); return@Thread }
+      emit("$trackerType: waiting for measurements (60 seconds maximum)")
      } catch (e: Exception) {
-      emit("SpO2 start failed: ${e.javaClass.simpleName}: ${e.message}")
+      emit("$trackerType start failed: ${e.javaClass.simpleName}: ${e.message}")
       stop()
      }
     }.start()
    }
    override fun onServiceDisconnected(name: ComponentName) {
     remote = null
-    emit("SpO2: Samsung service disconnected")
+    emit("$trackerType: Samsung service disconnected")
    }
   }
   connection = conn
@@ -122,19 +214,19 @@ class SamsungTrackerProbe(
     "com.samsung.android.service.health.tracking.requesthandler.WearTrackerService"
    ))
    if (!context.bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
-    emit("SpO2: bindService returned false")
+    emit("$trackerType: bindService returned false")
     stop()
     return
    }
    Thread {
     Thread.sleep(60_000)
     if (active) {
-     emit("SpO2: 60-second timeout")
+     emit("$trackerType: 60-second timeout")
      stop()
     }
    }.start()
   } catch (e: Exception) {
-   emit("SpO2 binding failed: ${e.javaClass.simpleName}: ${e.message}")
+   emit("$trackerType binding failed: ${e.javaClass.simpleName}: ${e.message}")
    stop()
   }
  }
@@ -147,8 +239,8 @@ class SamsungTrackerProbe(
      it.writeString(appId)
      it.writeString(trackerType)
     }
-    emit("SpO2: listener removed")
-   } catch (e: Exception) { emit("SpO2 cleanup: ${e.javaClass.simpleName}: ${e.message}") }
+    emit("$trackerType: listener removed")
+   } catch (e: Exception) { emit("$trackerType cleanup: ${e.javaClass.simpleName}: ${e.message}") }
   }
   remote = null
   connection?.let { try { context.unbindService(it) } catch (_: Exception) {} }

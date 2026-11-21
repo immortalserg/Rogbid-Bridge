@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-feature android:name="android.hardware.type.watch" android:required="true"/>
  <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+ <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
  <uses-permission android:name="android.permission.BODY_SENSORS"/>
  <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
@@ -10,7 +12,7 @@
  <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
  <uses-permission android:name="com.samsung.android.wear.shealth.healthdataprovider.permission.READ"/>
  <queries><provider android:authorities="com.samsung.android.wear.shealth.healthdataprovider"/></queries>
- <application android:label="Watch Bridge" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
+ <application android:label="Watch Bridge" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="true">
   <activity android:name=".MainActivity" android:exported="true">
    <intent-filter>
     <action android:name="android.intent.action.MAIN"/>

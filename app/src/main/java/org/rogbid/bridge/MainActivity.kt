@@ -348,6 +348,7 @@ class MainActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   L10n.init(this)
+  Thread { SamsungHealthProbe.run(applicationContext) }.start()
   // Sleep collection must run even when MQTT auto-publishing is disabled.
   startForegroundService(Intent(this, SyncService::class.java))
   showHome()

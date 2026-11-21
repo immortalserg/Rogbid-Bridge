@@ -15,9 +15,17 @@ import android.os.OutcomeReceiver
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import android.app.Activity
+import android.app.DatePickerDialog
+import java.time.LocalDate
+import java.time.Period
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
+import android.content.ContentValues
+import android.provider.MediaStore
+import android.os.Environment
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.os.IBinder
@@ -30,15 +38,33 @@ import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Spinner
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.ProgressBar
+import android.widget.FrameLayout
+import android.widget.EditText
+import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Read-only, on-device diagnostics. No MQTT publishing or historical data access yet. */
 class MainActivity : Activity(), SensorEventListener {
@@ -93,49 +119,375 @@ class MainActivity : Activity(), SensorEventListener {
   cell.addView(value)
   return cell to value
  }
+ private val homeHandler = Handler(Looper.getMainLooper())
+ private var pendingHomeTap: Runnable? = null
+ private var pulseAnimating = false
+ private var pulseLabel: TextView? = null
+ private var oxygenLabel: TextView? = null
+ private var homePulseButton: Button? = null
+ private var homeOxygenButton: Button? = null
+ private fun homeTap(kind: String, single: () -> Unit) {
+  val pending = pendingHomeTap
+  if (pending != null) {
+   homeHandler.removeCallbacks(pending)
+   pendingHomeTap = null
+   if (kind == lastHomeTapKind) {
+    if (kind == "heart") stopHeartBlink() else if (kind == "oxygen") stopOxygenBlink()
+    showJournal(kind)
+   } else single()
+  } else {
+   lastHomeTapKind = kind
+   val task = Runnable { pendingHomeTap = null; single() }
+   pendingHomeTap = task
+   homeHandler.postDelayed(task, 320L)
+  }
+ }
+ private var lastHomeTapKind = ""
+ private fun transmitVital(kind: String, value: Int, time: Long = System.currentTimeMillis()) {
+  val event = JSONObject().put("kind", kind).put("id", "$kind:$time")
+   .put("measured_at", java.time.Instant.ofEpochMilli(time).toString())
+  if (kind == "heart") event.put("bpm", value) else event.put("spo2", value)
+  mqtt?.publish(kind, event.toString())
+  bleServer?.publishJournal(event.toString())
+ }
+ private fun saveVital(kind: String, value: Int) {
+  val key = "vital_history_$kind"
+  val old = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+  if (old.length() > 0 && old.optJSONObject(0)?.optInt("value") == value &&
+      System.currentTimeMillis() - (old.optJSONObject(0)?.optLong("time") ?: 0L) < 60_000L) return
+  val updated = JSONArray().put(JSONObject().put("time", System.currentTimeMillis()).put("value", value))
+  for (i in 0 until minOf(old.length(), 49)) updated.put(old.get(i))
+  prefs.edit().putString(key, updated.toString()).apply()
+  transmitVital(kind, value)
+ }
+ private var oxygenAnimating = false
+ private var heartBeatGeneration = 0
+ private var oxygenBeatGeneration = 0
+ private fun renderHeartButton() {
+  homePulseButton?.text = "♥  " + (prefs.getString("last_heart", null) ?: "—")
+ }
+ private fun stopHeartBlink() {
+  pulseAnimating = false
+  heartBeatGeneration++
+  homePulseButton?.alpha = 1f
+  renderHeartButton()
+ }
+ private fun stopOxygenBlink() {
+  oxygenAnimating = false
+  oxygenBeatGeneration++
+  homeOxygenButton?.alpha = 1f
+  homeOxygenButton?.text = "O₂  " + (prefs.getString("last_oxygen", null) ?: "—")
+ }
+ private fun startHomeHeart() {
+  stopHeartBlink()
+  pulseAnimating = true
+  startSensors()
+  val sensor = manager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
+  if (sensor == null) { stopHeartBlink(); homePulseButton?.text = "♥ Нет датчика"; return }
+  val generation = ++heartBeatGeneration
+  val started = SystemClock.elapsedRealtime()
+  val animation = object : Runnable {
+   var bright = false
+   override fun run() {
+    if (!pulseAnimating || screen != "home" || generation != heartBeatGeneration) return
+    if (SystemClock.elapsedRealtime() - started >= 15_000L) { stopHeartBlink(); return }
+    bright = !bright
+    homePulseButton?.alpha = if (bright) 1f else 0.35f
+    homeHandler.postDelayed(this, 350L)
+   }
+  }
+  homeHandler.post(animation)
+ }
+ private fun startOxygenBlink() {
+  stopOxygenBlink()
+  oxygenAnimating = true
+  val generation = ++oxygenBeatGeneration
+  val started = SystemClock.elapsedRealtime()
+  val animation = object : Runnable {
+   var bright = false
+   override fun run() {
+    if (!oxygenAnimating || screen != "home" || generation != oxygenBeatGeneration) return
+    if (SystemClock.elapsedRealtime() - started >= 45_000L) { stopOxygenBlink(); return }
+    bright = !bright
+    homeOxygenButton?.alpha = if (bright) 1f else 0.35f
+    homeHandler.postDelayed(this, 350L)
+   }
+  }
+  homeHandler.post(animation)
+ }
  private fun showHome() {
   screen = "home"; heartValue = null; stepsValue = null
-  val root = page()
-  root.addView(label("Watch Bridge", 20f).apply { typeface = Typeface.DEFAULT_BOLD })
+  stopHeartBlink()
+  stopOxygenBlink()
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("Watch Bridge", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
   val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-  actions.addView(button("♥", { startSensors() }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
-  actions.addView(button("O₂", { showJournal("oxygen") }), LinearLayout.LayoutParams(0, dp(38), 1f).apply { setMargins(dp(5), dp(4), dp(5), dp(6)) })
+  homePulseButton = button("♥") { homeTap("heart") { startHomeHeart() } }
+  homeOxygenButton = button("O₂  " + (prefs.getString("last_oxygen", null) ?: "—")) { homeTap("oxygen") { startHomeOxygen() } }
+  actions.addView(homePulseButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  actions.addView(homeOxygenButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
   root.addView(actions)
-  val first = LinearLayout(this)
-  val second = LinearLayout(this)
-  val heartTile = tile("♥ Пульс", heart?.toInt()?.toString() ?: "—") { showJournal("heart") }
-  val oxygenTile = tile("O₂ Кислород", "—") { showJournal("oxygen") }
-  val stepsTile = tile("♟ Шаги", steps?.toInt()?.toString() ?: "—") { showJournal("steps") }
-  val sleepTile = tile("☾ Сон", "—") { showJournal("sleep") }
-  heartValue = heartTile.second; stepsValue = stepsTile.second
-  for ((row, cell) in listOf(first to heartTile.first, first to oxygenTile.first, second to stepsTile.first, second to sleepTile.first)) {
-   row.addView(cell, LinearLayout.LayoutParams(0, dp(76), 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) })
-  }
-  root.addView(first); root.addView(second)
-  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(10), dp(5), dp(4)) })
+  renderHeartButton()
+  val indicators = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  val stepsButton = button("♟  " + (todaySteps()?.toString() ?: "—")) { showJournal("steps") }
+  val sleepButton = button("☾  —") { showJournal("sleep") }
+  stepsValue = stepsButton
+  indicators.addView(stepsButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  indicators.addView(sleepButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  root.addView(indicators)
+  val measurements = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  measurements.addView(button("BIA") { showMeasurement("BIA") }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  measurements.addView(button("ЭКГ") { showMeasurement("ECG") }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
+  root.addView(measurements)
+  root.addView(button("Настройки") { showSettings() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
   showPage(root)
  }
+ private fun startHomeOxygen() {
+  startOxygenBlink()
+  startSpO2Measurement()
+ }
+ private fun stepHistory(): JSONObject = try {
+  JSONObject(prefs.getString("step_daily_history", "{}") ?: "{}")
+ } catch (_: Exception) { JSONObject() }
+ private fun todaySteps(): Int? = stepHistory().optJSONObject(LocalDate.now().toString())?.optInt("steps")
+ private fun recordStepCounter(total: Float) {
+  if (!total.isFinite() || total < 0f) return
+  val day = LocalDate.now().toString()
+  val history = stepHistory()
+  val entry = history.optJSONObject(day) ?: JSONObject()
+  val current = total.toLong()
+  val previous = entry.optLong("lastCounter", -1L)
+  val increment = if (previous < 0L) 0L else if (current >= previous) current - previous else current
+  val updated = (entry.optLong("steps", 0L) + increment).coerceAtMost(Int.MAX_VALUE.toLong())
+  entry.put("steps", updated)
+  entry.put("lastCounter", current)
+  entry.put("lastUpdate", System.currentTimeMillis())
+  history.put(day, entry)
+  history.keys().asSequence().toList().sortedDescending().drop(90).forEach { history.remove(it) }
+  prefs.edit().putString("step_daily_history", history.toString()).apply()
+  if (increment > 0L) {
+   val event = JSONObject().put("kind", "steps").put("id", "steps:$day")
+    .put("measured_at", java.time.Instant.now().toString()).put("date", day)
+    .put("steps", updated).put("diatance", 0).put("kcal", 0)
+   mqtt?.publish("steps", event.toString())
+   bleServer?.publishJournal(event.toString())
+  }
+ }
  private fun showJournal(kind: String) {
+  stopHeartBlink()
+  stopOxygenBlink()
   screen = kind
-  val root = page()
+  val root = page().apply { setPadding(dp(12), dp(2), dp(12), dp(12)) }
+  root.addView(button("← Назад") { showHome() })
   val title = when(kind) { "heart" -> "История пульса"; "oxygen" -> "История кислорода"; "steps" -> "История шагов"; else -> "История сна" }
-  root.addView(label(title, 19f))
-  root.addView(label("Исторические записи пока не подключены. Данные не выдумываются.", 13f))
-  if (kind == "heart") root.addView(label("Сейчас: ${heart?.toInt()?.toString() ?: "—"} bpm"))
-  if (kind == "steps") root.addView(label("Счётчик с перезагрузки: ${steps?.toInt()?.toString() ?: "—"}"))
-  root.addView(button("Назад") { showHome() })
+  root.addView(label(title, 17f))
+  if (kind == "heart" || kind == "oxygen") {
+   val history = try { JSONArray(prefs.getString("vital_history_$kind", "[]")) } catch (_: Exception) { JSONArray() }
+   if (history.length() == 0) root.addView(label("Измерений пока нет", 12f))
+   for (i in 0 until history.length()) {
+    val entry = history.optJSONObject(i) ?: continue
+    val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(entry.optLong("time")))
+    root.addView(label("$date   ${entry.optInt("value")} " + (if (kind == "heart") "уд/мин" else "%"), 12f))
+   }
+  } else if (kind == "steps") {
+   root.addView(label("Шаги, зарегистрированные приложением по дням", 11f))
+   val history = stepHistory()
+   val days = history.keys().asSequence().toList().sortedDescending()
+   if (days.isEmpty()) root.addView(label("Данных пока нет", 12f))
+   days.forEach { day ->
+    val entry = history.optJSONObject(day) ?: return@forEach
+    root.addView(label("$day   ${entry.optInt("steps")} шагов", 12f))
+   }
+   root.addView(label("Учёт начинается с первого запуска. Для точного суточного итога нужна синхронизация с системной историей шагов.", 10f))
+  } else root.addView(label("История пока не подключена", 12f))
   showPage(root)
  }
  private fun showSettings() {
   screen = "settings"
   val root = page()
-  root.addView(label("Настройки", 19f))
-  val currentTheme = prefs.getString("skin", "dark") ?: "dark"
-  root.addView(button("Тема оформления: ${themeTitle(currentTheme)}") { showThemeSelection() },
-   LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { setMargins(dp(5), dp(6), dp(5), dp(6)) })
+  root.addView(label("Настройки", 17f))
+  root.addView(button("Настройки приложения") { showAppSettings() })
+  root.addView(button("Параметры тела") { showBodySettings() })
   root.addView(button("Диагностика датчиков") { showDiagnostics() })
-  root.addView(label("MQTT: пока не подключён", 12f))
   root.addView(button("Назад") { showHome() })
+  showPage(root)
+ }
+ private fun showAppSettings() {
+  screen = "app_settings"
+  val root = page()
+  root.addView(label("Настройки приложения", 16f))
+  root.addView(label("Тема оформления", 13f))
+  val themeKeys = listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")
+  val themeNames = themeKeys.map { themeTitle(it) }
+  val selector = Spinner(this).apply {
+   val palette = skin()
+   adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, themeNames) {
+    override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+     return (super.getView(position, convertView, parent) as TextView).apply {
+      setTextColor(palette.fg)
+      setBackgroundColor(palette.tile)
+      textSize = 13f
+      setPadding(dp(10), dp(8), dp(8), dp(8))
+     }
+    }
+    override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+     return (super.getDropDownView(position, convertView, parent) as TextView).apply {
+      setTextColor(palette.fg)
+      setBackgroundColor(palette.tile)
+      textSize = 13f
+      setPadding(dp(10), dp(10), dp(8), dp(10))
+     }
+    }
+   }
+   setPopupBackgroundDrawable(GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() })
+   background = GradientDrawable().apply { setColor(palette.tile); cornerRadius = dp(10).toFloat() }
+   setSelection(themeKeys.indexOf(prefs.getString("skin", "dark")).coerceAtLeast(0))
+   onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+    override fun onNothingSelected(parent: AdapterView<*>?) {}
+    override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+     val selected = themeKeys[position]
+     if (prefs.getString("skin", "dark") != selected) {
+      prefs.edit().putString("skin", selected).apply()
+      showAppSettings()
+     }
+    }
+   }
+  }
+  root.addView(selector, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
+   setMargins(dp(5), dp(4), dp(5), dp(8))
+  })
+  root.addView(button("MQTT и Bluetooth") { showTransportSettings() })
+  root.addView(label(mqttInfo, 11f))
+  root.addView(button("Назад") { showSettings() })
+  showPage(root)
+ }
+ private fun showTransportSettings() {
+  screen = "transport_settings"
+  val root = page()
+  root.addView(label("Передача данных", 15f))
+  fun field(title: String, key: String, fallback: String = "", password: Boolean = false): EditText {
+   root.addView(label(title, 11f))
+   val input = EditText(this).apply {
+    setText(prefs.getString(key, fallback).orEmpty())
+    setTextColor(skin().fg)
+    textSize = 12f
+    setSingleLine(true)
+    if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+   }
+   root.addView(input)
+   return input
+  }
+  val host = field("MQTT сервер (IP или DNS)", "mqtt_host")
+  val port = field("Порт (TLS: 8883, обычный: 1883)", "mqtt_port", "8883")
+  val user = field("Логин", "mqtt_user")
+  val pass = field("Пароль", "mqtt_password", password = true)
+  var enabled = prefs.getBoolean("mqtt_enabled", false)
+  var tls = prefs.getBoolean("mqtt_tls", true)
+  var ble = prefs.getBoolean("ble_enabled", false)
+  lateinit var mqttToggle: Button
+  mqttToggle = button("MQTT: " + if (enabled) "Вкл" else "Выкл") {
+   enabled = !enabled
+   mqttToggle.text = "MQTT: " + if (enabled) "Вкл" else "Выкл"
+  }
+  root.addView(mqttToggle)
+  lateinit var tlsToggle: Button
+  tlsToggle = button("TLS: " + if (tls) "Вкл" else "Выкл") {
+   tls = !tls
+   tlsToggle.text = "TLS: " + if (tls) "Вкл" else "Выкл"
+  }
+  root.addView(tlsToggle)
+  lateinit var bleToggle: Button
+  bleToggle = button("Bluetooth: " + if (ble) "Вкл" else "Выкл") {
+   ble = !ble
+   bleToggle.text = "Bluetooth: " + if (ble) "Вкл" else "Выкл"
+  }
+  root.addView(bleToggle)
+  root.addView(button("Сохранить") {
+   val p = port.text.toString().toIntOrNull()
+   if (p == null || p !in 1..65535) {
+    mqttInfo = "Неверный MQTT порт"
+   } else {
+    prefs.edit().putString("mqtt_host", host.text.toString().trim())
+     .putString("mqtt_port", p.toString())
+     .putString("mqtt_user", user.text.toString())
+     .putString("mqtt_password", pass.text.toString())
+     .putBoolean("mqtt_enabled", enabled)
+     .putBoolean("mqtt_tls", tls)
+     .putBoolean("ble_enabled", ble).apply()
+    if (ble) startBle() else { bleServer?.stop(); bleServer = null }
+    mqttInfo = "Настройки сохранены"
+   }
+   showAppSettings()
+  })
+  root.addView(button("Назад") { showAppSettings() })
+  showPage(root)
+ }
+ private fun showBodySettings() {
+  screen = "body_settings"
+  val root = page()
+  root.addView(label("Параметры тела", 18f))
+  root.addView(label("Для расчёта состава тела (BIA)", 12f))
+  fun field(title: String, key: String, decimal: Boolean): EditText {
+   root.addView(label(title, 12f))
+   val input = EditText(this).apply {
+    setText(prefs.getString(key, "") ?: "")
+    textSize = 16f
+    setTextColor(skin().fg)
+    setHintTextColor(skin().accent)
+    gravity = Gravity.CENTER
+    inputType = if (decimal) InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                else InputType.TYPE_CLASS_NUMBER
+    setSingleLine(true)
+    background = GradientDrawable().apply { setColor(skin().tile); cornerRadius = dp(10).toFloat() }
+    setPadding(dp(8), dp(7), dp(8), dp(7))
+   }
+   root.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(43)))
+   return input
+  }
+  val height = field("Рост (см)", "body_height", true)
+  val weight = field("Вес (кг)", "body_weight", true)
+  val birthDate = label(prefs.getString("body_birth_date", null) ?: "Выбрать дату рождения", 14f)
+  root.addView(label("Дата рождения", 12f))
+  root.addView(button(prefs.getString("body_birth_date", null) ?: "Выбрать дату рождения") {
+   val existing = parseBirthDate(prefs.getString("body_birth_date", null)) ?: LocalDate.now().minusYears(30)
+   DatePickerDialog(this, { _, year, month, day ->
+    val selected = LocalDate.of(year, month + 1, day)
+    birthDate.text = selected.format(DateTimeFormatter.ISO_LOCAL_DATE)
+   }, existing.year, existing.monthValue - 1, existing.dayOfMonth).apply {
+    datePicker.maxDate = System.currentTimeMillis()
+   }.show()
+  })
+  root.addView(birthDate)
+  root.addView(label("Пол для алгоритма BIA", 12f))
+  val gender = Spinner(this).apply {
+   adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Мужской", "Женский"))
+   setSelection(if (prefs.getInt("body_gender", 1) == 0) 1 else 0)
+  }
+  root.addView(gender)
+  val notice = label("", 12f)
+  root.addView(notice)
+  root.addView(button("Сохранить") {
+   val h = height.text.toString().replace(',', '.').toFloatOrNull()
+   val w = weight.text.toString().replace(',', '.').toFloatOrNull()
+   val birthday = parseBirthDate(birthDate.text.toString())
+   val a = birthday?.let { Period.between(it, LocalDate.now()).years }
+   if (h == null || h !in 100f..250f || w == null || w !in 20f..300f || a == null || a !in 18..120) {
+    notice.text = "Проверь данные: рост 100–250 см, вес 20–300 кг, дата рождения (возраст 18–120 лет)"
+   } else {
+    prefs.edit()
+     .putString("body_height", h.toString())
+     .putString("body_weight", w.toString())
+     .putString("body_birth_date", birthday.toString())
+     .remove("body_age")
+     .putInt("body_gender", if (gender.selectedItemPosition == 0) 1 else 0)
+     .apply()
+    notice.text = "Сохранено"
+   }
+  })
+  root.addView(button("Назад") { showSettings() })
   showPage(root)
  }
  private fun themeTitle(name: String): String = when (name) {
@@ -150,45 +502,500 @@ class MainActivity : Activity(), SensorEventListener {
   "sky" -> "Небесная"
   else -> name
  }
- private fun showThemeSelection() {
-  screen = "themes"
-  val root = page()
-  root.addView(label("Тема оформления", 19f))
-  val selected = prefs.getString("skin", "dark") ?: "dark"
-  for (name in listOf("dark", "light", "forest", "sunset", "pink", "lavender", "mint", "cream", "sky")) {
-   val prefix = if (name == selected) "✓  " else "○  "
-   root.addView(button(prefix + themeTitle(name)) {
-    prefs.edit().putString("skin", name).apply()
-    showSettings()
-   }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply {
-    setMargins(dp(5), dp(2), dp(5), dp(2))
-   })
-  }
-  root.addView(button("Назад") { showSettings() })
-  showPage(root)
- }
+ private var progressBar: ProgressBar? = null
+ private var progressLabel: TextView? = null
+ private var measurementStatus: TextView? = null
+ private var measurementResult: TextView? = null
+ private var measurementProgress = 0
+ private var measurementMessage = "Ожидание"
+ private var measurementPreview = ""
+ private var biaSavedForRun = false
+ private var ecgWaveform: EcgWaveformView? = null
+ private var ecgRecording = false
+ private var ecgStartedAt = 0L
+ private var ecgContactSince = 0L
+ private var ecgSessionId = 0L
+ private var ecgContactLost = false
+ private val ecgPreparation = ArrayDeque<Float>()
+ private var ecgPreparationWarning = ""
+ private var ecgLastUiAt = 0L
+ private var ecgLastRenderedSample = 0
+ private val ecgSamples = mutableListOf<Triple<Long, Float, Int>>()
+ private val ecgHandler = Handler(Looper.getMainLooper())
  private fun showDiagnostics() {
   screen = "diagnostics"
   val root = page()
-  root.addView(label("Диагностика", 19f))
-  output = label("", 12f).apply { gravity = Gravity.START }
-  root.addView(output)
+  root.addView(label("Измерения", 19f))
+  root.addView(button("♥ Пульс") { showMeasurement("HEART_RATE") })
+  root.addView(button("O₂ Кислород") { showMeasurement("SPO2") })
+  root.addView(button("ЭКГ") { showMeasurement("ECG") })
+  root.addView(button("Состав тела · BIA") { showMeasurement("BIA") })
+  root.addView(button("История состава тела") { showBiaHistory() })
+  root.addView(button("Системная диагностика") { showSystemDiagnostics() })
+  root.addView(button("Назад") { showSettings() })
+  showPage(root)
+ }
+ private fun showMeasurement(tracker: String) {
+  screen = "measurement"
+  activeTrackerName = tracker
+  measurementProgress = 0
+  measurementMessage = ""
+  measurementPreview = ""
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  val title = when (tracker) {
+   "BIA" -> "Состав тела"
+   "ECG" -> "ЭКГ"
+   "SPO2" -> "Кислород"
+   else -> "Пульс"
+  }
+  root.addView(label(title, 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  if (tracker == "BIA" && bodyProfile() == null) {
+   root.addView(label("Укажи параметры тела в настройках", 11f))
+  }
+  progressLabel = label("0%", 24f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), dp(1), dp(2), dp(1))
+  }
+  progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+   max = 100
+   progress = 0
+   progressTintList = android.content.res.ColorStateList.valueOf(skin().accent)
+   setPadding(0, 0, 0, 0)
+  }
+  measurementStatus = label("", 13f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
+  measurementResult = label("", 12f).apply { setPadding(dp(2), dp(1), dp(2), dp(1)) }
+  if (tracker == "ECG") {
+   val chart = FrameLayout(this)
+   ecgWaveform = EcgWaveformView(this)
+   chart.addView(ecgWaveform, FrameLayout.LayoutParams(
+    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+   progressLabel?.apply {
+    setTextColor(skin().fg)
+    setShadowLayer(dp(3).toFloat(), 0f, 0f, skin().bg)
+    chart.addView(this, FrameLayout.LayoutParams(
+     FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+   }
+   chart.addView(progressBar, FrameLayout.LayoutParams(
+    FrameLayout.LayoutParams.MATCH_PARENT, dp(8), Gravity.BOTTOM).apply {
+     setMargins(dp(8), 0, dp(8), dp(2))
+   })
+   root.addView(chart, LinearLayout.LayoutParams(
+    LinearLayout.LayoutParams.MATCH_PARENT, dp(105)))
+   root.addView(measurementStatus)
+  } else {
+   root.addView(progressLabel)
+   root.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)).apply {
+    setMargins(dp(10), 0, dp(10), dp(2))
+   })
+   root.addView(measurementStatus)
+  }
+  val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  actions.addView(button("Начать") {
+   measurementProgress = 0
+   measurementMessage = "Ожидание данных датчика…"
+   measurementPreview = ""
+   if (tracker == "ECG") startEcgRecording()
+   else if (tracker == "SPO2") startSpO2Measurement()
+   else startSamsungTrackerTest(tracker)
+   updateMeasurementUi()
+  }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(2)) })
+  if (tracker == "BIA" || tracker == "ECG") {
+   actions.addView(button("История") {
+    if (tracker == "ECG") { if (ecgRecording) finishEcgRecording() else stopSamsungTrackerTest(); showEcgHistory() }
+    else { stopSamsungTrackerTest(); showBiaHistory() }
+   }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(3), dp(2), dp(3), dp(2)) })
+  }
+  root.addView(actions)
+  root.addView(button("Назад") {
+   if (tracker == "ECG") {
+    if (ecgRecording) finishEcgRecording() else stopSamsungTrackerTest()
+   } else stopSamsungTrackerTest()
+   progressBar = null
+   progressLabel = null
+   measurementStatus = null
+   measurementResult = null
+   ecgWaveform = null
+   showHome()
+  })
+  // Keep BIA results below the Back button; ECG diagnostics stay below the chart.
+  root.addView(measurementResult)
+  showPage(root)
+  updateMeasurementUi()
+ }
+ private fun startEcgRecording() {
+  stopSamsungTrackerTest()
+  synchronized(ecgSamples) { ecgSamples.clear() }
+  ecgWaveform?.clear()
+  ecgSessionId++
+  ecgRecording = true
+  ecgStartedAt = 0L // Wait for five seconds of continuous valid electrode contact.
+  ecgContactSince = 0L
+  ecgContactLost = false
+  ecgPreparation.clear()
+  ecgPreparationWarning = ""
+  ecgLastUiAt = 0L
+  ecgLastRenderedSample = 0
+  measurementProgress = 0
+  measurementMessage = "Прикоснись пальцем к электроду"
+  measurementPreview = "Ожидание устойчивого контакта…"
+  updateMeasurementUi()
+  startSamsungTrackerTest("ECG")
+ }
+ private fun receiveEcgSample(value: Float, contact: Int, timestamp: Long) {
+  if (!ecgRecording || !value.isFinite()) return
+  val now = SystemClock.elapsedRealtime()
+  if (ecgStartedAt == 0L) {
+   if (contact == 0) {
+    if (ecgContactSince == 0L) ecgContactSince = now
+    ecgPreparation.addLast(value)
+    while (ecgPreparation.size > 2500) ecgPreparation.removeFirst()
+    val stableFor = now - ecgContactSince
+    if (stableFor >= 5000L && ecgPreparation.size >= 1500) {
+     val recent = ecgPreparation.toList()
+     val segment = (recent.size / 5).coerceAtLeast(1)
+     val firstMean = recent.take(segment).average()
+     val lastMean = recent.takeLast(segment).average()
+     val drift = kotlin.math.abs(lastMean - firstMean)
+     val localVariation = recent.zipWithNext().map { kotlin.math.abs(it.second - it.first).toDouble() }.average()
+     val acceptable = drift < kotlin.math.max(1.5, localVariation * 15.0)
+     if (acceptable || stableFor >= 15_000L) {
+      ecgPreparationWarning = if (acceptable) "" else "Сигнал нестабилен: высокий дрейф"
+      ecgStartedAt = now
+      ecgLastUiAt = 0L
+     ecgLastRenderedSample = 0
+     synchronized(ecgSamples) { ecgSamples.clear() }
+     val session = ecgSessionId
+     ecgHandler.postDelayed({
+      if (ecgRecording && ecgSessionId == session && ecgStartedAt != 0L &&
+          SystemClock.elapsedRealtime() - ecgStartedAt >= 29_500L) finishEcgRecording()
+     }, 30_000L)
+     } else ecgPreparationWarning = "Сигнал нестабилен: ожидание до 15 с"
+    }
+   } else {
+    ecgContactSince = 0L
+    ecgPreparation.clear()
+    ecgPreparationWarning = ""
+   }
+   if (ecgStartedAt == 0L) {
+    if (now - ecgLastUiAt >= 200L) {
+     ecgLastUiAt = now
+     runOnUiThread {
+      if (ecgRecording && ecgStartedAt == 0L && screen == "measurement") {
+       measurementProgress = 0
+       measurementMessage = if (contact == 0) "Проверка контакта электрода…" else "Прикоснись пальцем к электроду"
+       measurementPreview = if (contact == 0 && ecgContactSince != 0L)
+        "Контакт: ${((now - ecgContactSince) / 1000L).coerceIn(0L, 15L)} с · $ecgPreparationWarning"
+       else "Отсчёт начнётся после 5 секунд устойчивого контакта"
+       updateMeasurementUi()
+      }
+     }
+    }
+    return
+   }
+  }
+  val elapsed = now - ecgStartedAt
+  if (elapsed < 0 || elapsed > 30_500L) return
+  synchronized(ecgSamples) {
+   if (ecgSamples.size < 30000) ecgSamples.add(Triple(timestamp, value, contact))
+  }
+  if (contact != 0) ecgContactLost = true
+  if (now - ecgLastUiAt < 100L) return
+  ecgLastUiAt = now
+  runOnUiThread {
+   if (!ecgRecording || screen != "measurement" || activeTrackerName != "ECG") return@runOnUiThread
+   val batch = synchronized(ecgSamples) {
+    val start = ecgLastRenderedSample.coerceAtMost(ecgSamples.size)
+    val values = ecgSamples.subList(start, ecgSamples.size).map { it.second }
+    ecgLastRenderedSample = ecgSamples.size
+    values
+   }
+   ecgWaveform?.appendBatch(batch)
+   measurementProgress = (elapsed / 300L).toInt().coerceIn(0, 100)
+   measurementMessage = if (contact == 0) "Запись сигнала…" else "Проверь контакт электрода (код $contact)"
+   measurementPreview = "Отсчётов: ${synchronized(ecgSamples) { ecgSamples.size }}" +
+    if (ecgPreparationWarning.isNotEmpty()) " · $ecgPreparationWarning" else ""
+   updateMeasurementUi()
+  }
+ }
+ private fun finishEcgRecording() {
+  if (!ecgRecording) { stopSamsungTrackerTest(); return }
+  ecgRecording = false
+  ecgSessionId++
+  val durationMs = if (ecgStartedAt == 0L) 0L else (SystemClock.elapsedRealtime() - ecgStartedAt).coerceAtLeast(0L)
+  stopSamsungTrackerTest()
+  val copy = synchronized(ecgSamples) { ecgSamples.toList() }
+  if (copy.isNotEmpty()) {
+   try {
+    val fileName = "ecg_${System.currentTimeMillis()}.csv"
+    openFileOutput(fileName, MODE_PRIVATE).bufferedWriter().use { writer ->
+     writer.write("timestamp,ecg_mv,lead_off\n")
+     copy.forEach { (timestamp, mv, lead) -> writer.write("$timestamp,$mv,$lead\n") }
+    }
+    val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
+    val item = JSONObject().put("file", fileName).put("timestamp", System.currentTimeMillis())
+     .put("durationMs", durationMs).put("samples", copy.size).put("contactLost", ecgContactLost)
+    val updated = JSONArray().put(item)
+    for (i in 0 until minOf(19, history.length())) updated.put(history.get(i))
+    prefs.edit().putString("ecg_history", updated.toString()).apply()
+    measurementMessage = "Запись ЭКГ сохранена"
+    measurementPreview = "${durationMs / 1000} с · ${copy.size} отсчётов" +
+     if (ecgContactLost) " · Были нарушения контакта" else ""
+   } catch (e: Exception) {
+    measurementMessage = "Ошибка сохранения ЭКГ"
+    measurementPreview = e.message ?: e.javaClass.simpleName
+   }
+  } else {
+   measurementMessage = "Нет отсчётов ЭКГ"
+   measurementPreview = "Проверь контакт электрода"
+  }
+  measurementProgress = (durationMs / 300L).toInt().coerceIn(0, 100)
+  updateMeasurementUi()
+ }
+ private fun showEcgHistory() {
+  screen = "ecg_history"
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("История ЭКГ", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  root.addView(button("← Назад") { showMeasurement("ECG") })
+  val history = try { JSONArray(prefs.getString("ecg_history", "[]")) } catch (_: Exception) { JSONArray() }
+  if (history.length() == 0) root.addView(label("Записей пока нет", 12f))
+  for (i in 0 until history.length()) {
+   val item = history.optJSONObject(i) ?: continue
+   val date = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(item.optLong("timestamp")))
+   val file = item.optString("file")
+   root.addView(button("$date · ${item.optLong("durationMs") / 1000} с · ${item.optInt("samples")} отсчётов") {
+    showEcgRecording(file, date)
+   })
+  }
+  root.addView(label("Исходные отсчёты хранятся в CSV на часах.", 11f))
+  showPage(root)
+ }
+ private fun exportEcgCsv(file: String, status: TextView) {
+  if (!Regex("^ecg_[0-9]+\\.csv$").matches(file)) {
+   status.text = "Недопустимое имя записи"
+   return
+  }
+  var uri: Uri? = null
+  try {
+   val values = ContentValues().apply {
+    put(MediaStore.MediaColumns.DISPLAY_NAME, file)
+    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/WatchBridge")
+    put(MediaStore.MediaColumns.IS_PENDING, 1)
+   }
+   uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+    ?: throw IllegalStateException("Не удалось создать файл в Downloads")
+   val destination = uri
+   contentResolver.openOutputStream(destination)?.use { output ->
+    openFileInput(file).use { input -> input.copyTo(output) }
+   } ?: throw IllegalStateException("Не удалось открыть файл для записи")
+   contentResolver.update(destination, ContentValues().apply {
+    put(MediaStore.MediaColumns.IS_PENDING, 0)
+   }, null, null)
+   status.text = "Экспортировано: Download/WatchBridge/$file"
+  } catch (e: Exception) {
+   uri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) {} }
+   status.text = "Ошибка экспорта: ${e.message ?: e.javaClass.simpleName}"
+  }
+ }
+ private fun showEcgRecording(file: String, date: String) {
+  val values = try {
+   openFileInput(file).bufferedReader().useLines { lines ->
+    lines.drop(1).mapNotNull { it.split(',').getOrNull(1)?.toFloatOrNull() }.take(30000).toList()
+   }
+  } catch (e: Exception) {
+   screen = "ecg_details"
+   val error = page()
+   error.addView(label("Не удалось открыть ЭКГ: ${e.message}", 12f))
+   error.addView(button("Назад") { showEcgHistory() })
+   showPage(error)
+   return
+  }
+  screen = "ecg_details"
+  val root = page()
+  root.addView(label(date, 15f))
+  root.addView(label("ЭКГ · запись ${values.size} отсчётов", 12f))
+  val waveform = EcgWaveformView(this)
+  root.addView(waveform, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(145)))
+  val position = label("", 12f)
+  root.addView(position)
+  var startSample = 0
+  var filtered = true
+  fun redraw() {
+   waveform.setFilterEnabled(filtered)
+   waveform.setRecording(values.drop(startSample).take(1500))
+   position.text = "${startSample / 500}–${minOf(values.size, startSample + 1500) / 500} с · " +
+    if (filtered) "Фильтр включён" else "Без фильтра"
+  }
+  val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+  nav.addView(button("◀ 3 с") { startSample = (startSample - 1500).coerceAtLeast(0); redraw() },
+   LinearLayout.LayoutParams(0, dp(40), 1f))
+  nav.addView(button("3 с ▶") {
+   startSample = (startSample + 1500).coerceAtMost(((values.size - 1) / 1500 * 1500).coerceAtLeast(0))
+   redraw()
+  }, LinearLayout.LayoutParams(0, dp(40), 1f))
+  root.addView(nav)
+  root.addView(button("Фильтр: вкл/выкл") { filtered = !filtered; redraw() })
+  val exportStatus = label("", 11f)
+  root.addView(button("Экспорт CSV в Downloads") { exportEcgCsv(file, exportStatus) })
+  root.addView(exportStatus)
+  root.addView(label("Фильтр только для просмотра. CSV содержит исходный сигнал.", 11f))
+  root.addView(button("Назад") { showEcgHistory() })
+  showPage(root)
+  redraw()
+ }
+ private fun biaField(message: String, name: String): Float? =
+  Regex("(?:^|\\s)" + Regex.escape(name) + "=(-?[0-9]+(?:\\.[0-9]+)?)")
+   .find(message)?.groupValues?.get(1)?.toFloatOrNull()
+ private fun formatBia(value: Float?, unit: String): String =
+  if (value != null && value.isFinite()) String.format(Locale.getDefault(), "%.1f %s", value, unit) else "—"
+ private fun biaSummary(message: String): String {
+  val fields = listOf(
+   Triple("Жир", "fatRatio", "%"),
+   Triple("Жировая масса", "fatMass", "кг"),
+   Triple("Вода", "bodyWater", "кг"),
+   Triple("Скелетные мышцы", "muscleMass", "кг"),
+   Triple("Доля мышц", "muscleRatio", "%"),
+   Triple("Безжировая масса", "fatFreeMass", "кг"),
+   Triple("Базовый обмен", "bmr", "ккал/сут"),
+   Triple("Импеданс", "impedanceMagnitude", "Ом")
+  )
+  return fields.joinToString("\n") { (title, key, unit) ->
+   "$title: ${formatBia(biaField(message, key), unit)}"
+  }
+ }
+ private fun saveBiaResult(message: String) {
+  val entry = JSONObject()
+  entry.put("timestamp", System.currentTimeMillis())
+  for (key in listOf("fatRatio", "fatMass", "bodyWater", "muscleRatio", "muscleMass",
+                     "bmr", "fatFreeRatio", "fatFreeMass", "impedanceMagnitude", "impedanceDegree")) {
+   biaField(message, key)?.let { entry.put(key, it.toDouble()) }
+  }
+  val history = try { JSONArray(prefs.getString("bia_history", "[]")) } catch (_: Exception) { JSONArray() }
+  val updated = JSONArray()
+  updated.put(entry)
+  for (i in 0 until minOf(history.length(), 49)) updated.put(history.get(i))
+  prefs.edit().putString("bia_history", updated.toString()).apply()
+ }
+ private fun showBiaHistory() {
+  screen = "bia_history"
+  val root = page().apply { setPadding(dp(10), dp(2), dp(10), dp(10)) }
+  root.addView(label("История BIA", 13f).apply {
+   typeface = Typeface.DEFAULT_BOLD
+   setPadding(dp(2), 0, dp(2), dp(2))
+  })
+  root.addView(button("← Назад") { showMeasurement("BIA") })
+  val history = try { JSONArray(prefs.getString("bia_history", "[]")) } catch (_: Exception) { JSONArray() }
+  if (history.length() == 0) root.addView(label("Завершённых измерений пока нет", 12f))
+  for (i in 0 until history.length()) {
+   val entry = history.optJSONObject(i) ?: continue
+   val date = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(entry.optLong("timestamp")))
+   root.addView(button(date) {
+    val details = page()
+    details.addView(label(date, 16f))
+    val lines = listOf(
+     Triple("Жир", "fatRatio", "%"), Triple("Жировая масса", "fatMass", "кг"),
+     Triple("Вода", "bodyWater", "кг"), Triple("Мышцы", "muscleMass", "кг"),
+     Triple("Безжировая масса", "fatFreeMass", "кг"),
+     Triple("Базовый обмен", "bmr", "ккал/сут"),
+     Triple("Импеданс", "impedanceMagnitude", "Ом")
+    ).joinToString("\n") { (title, key, unit) ->
+     "$title: ${formatBia(if (entry.has(key)) entry.optDouble(key).toFloat() else null, unit)}"
+    }
+    details.addView(label(lines, 13f))
+    details.addView(button("Назад") { showBiaHistory() })
+    screen = "bia_details"
+    showPage(details)
+   })
+  }
+  showPage(root)
+ }
+ private fun updateMeasurementUi() {
+  if (screen != "measurement") return
+  progressBar?.progress = measurementProgress
+  progressLabel?.text = if (activeTrackerName == "BIA" || activeTrackerName == "ECG" || measurementProgress > 0) "$measurementProgress%" else "—"
+  measurementStatus?.text = measurementMessage
+  measurementResult?.text = measurementPreview
+ }
+ private var oxygenMeasurementGeneration = 0
+ private fun startSpO2Measurement() {
+  stopSamsungTrackerTest()
+  val generation = ++oxygenMeasurementGeneration
+  activeTrackerName = "SPO2"
+  measurementMessage = "Измерение кислорода…"
+  if (screen == "home") homeOxygenButton?.text = "O₂  …"
+  spo2Probe = SamsungTrackerProbe(this) { message ->
+   runOnUiThread {
+    if (generation != oxygenMeasurementGeneration || activeTrackerName != "SPO2") return@runOnUiThread
+    android.util.Log.i("WatchBridgeOxygen", message)
+    val result = publishSpO2FromProbe(message)
+    if (result != null) {
+     spo2Result = result
+     val oxygen = Regex("SpO₂: (\\d+)%").find(result)?.groupValues?.get(1)?.toIntOrNull()
+     if (oxygen != null) {
+      prefs.edit().putString("last_oxygen", "$oxygen%").apply()
+      saveVital("oxygen", oxygen)
+     }
+     measurementMessage = "Измерение завершено"
+     measurementPreview = result
+     measurementProgress = 100
+     stopOxygenBlink()
+    } else if (message.startsWith("SPO2 status=2") && result == null) {
+     measurementMessage = "Измерение завершено без достоверного результата"
+     measurementPreview = message.take(160)
+     spo2Result = measurementPreview
+     stopOxygenBlink()
+     if (screen == "home") homeOxygenButton?.text = "O₂  Нет данных"
+    } else if (message.contains("error", true) || message.contains("failed", true) ||
+               message.contains("timeout", true) || message.contains("status=3") ||
+               message.contains("status=-6") || message.contains("tracker error code", true) ||
+               message.contains("bindService returned false", true)) {
+     measurementMessage = "Ошибка измерения O₂"
+     measurementPreview = message.take(160)
+     spo2Result = measurementPreview
+     stopOxygenBlink()
+     if (screen == "home") homeOxygenButton?.text = "O₂  Ошибка"
+    } else if (screen == "home" && message.startsWith("SPO2 status=")) {
+     // Show a neutral measurement indicator; raw status remains in Logcat.
+     homeOxygenButton?.text = "O₂  …"
+    }
+    updateMeasurementUi()
+   }
+  }
+  spo2Probe?.start()
+ }
+ private fun showSystemDiagnostics() {
+  screen = "system_diagnostics"
+  val root = page()
+  root.addView(label("Система", 18f))
+  output = label("", 11f).apply { gravity = Gravity.START }
   root.addView(button("Разрешения") { requestMissingPermissions() })
   root.addView(button("Samsung provider") { checkProvider() })
   root.addView(button("Samsung services") { checkSamsungServices() })
-  root.addView(button("Тест SpO₂ (60 сек)") {
-   spo2Probe?.stop()
-   spo2Probe = SamsungTrackerProbe(this) { message ->
-    runOnUiThread { samsungServicesInfo += "\n" + message; refresh() }
-   }
-   spo2Probe?.start()
-  })
-  root.addView(button("Остановить SpO₂") { spo2Probe?.stop() })
+  root.addView(button("BLE: запустить") { startBle() })
+  root.addView(button("BLE: остановить") { bleServer?.stop(); bleServer = null; bleInfo = "BLE stopped"; refresh() })
   root.addView(button("Health Connect: 7 дней") { checkHealthConnect() })
-  root.addView(button("Запросить разрешения Health Connect") { requestHealthPermissions() })
-  root.addView(button("Датчики") { startSensors() })
-  root.addView(button("Назад") { showSettings() })
-  showPage(root); refresh()
+  root.addView(button("Разрешения Health Connect") { requestHealthPermissions() })
+  root.addView(button("Датчики Android") { startSensors() })
+  root.addView(button("Назад") { showDiagnostics() })
+  root.addView(output)
+  showPage(root)
+  refresh()
+ }
+ private fun biaMessage(code: Int): String = when(code) {
+  0 -> "Измерение… удерживай пальцы"
+  2 -> "Проверка датчика (NV_NG)"
+  4 -> "Часы не касаются запястья"
+  7, 8, 9 -> "Коснись обеих боковых кнопок"
+  10 -> "Поправь ремешок: слабый контакт"
+  11 -> "Слишком сухие пальцы"
+  17 -> "Нестабильный контакт"
+  else -> "Ошибка BIA: $code"
  }
 
  private var heart: Float? = null
@@ -199,6 +1006,17 @@ class MainActivity : Activity(), SensorEventListener {
  private val samsungConnections = mutableListOf<ServiceConnection>()
  private var healthConnectInfo = "Not checked"
  private var spo2Probe: SamsungTrackerProbe? = null
+ private var spo2Result = "—"
+ private var samsungTrackerTestResult = "Не запускался"
+ private var activeTrackerName: String? = null
+ private var trackerTestGeneration = 0
+ private var trackerSampleCount = 0
+ private val trackerSamplePreviews = mutableListOf<String>()
+ private var trackerLastUiUpdate = 0L
+ private var mqtt: WatchMqtt? = null
+ private var mqttInfo = "MQTT выключен"
+ private var bleServer: WatchBleServer? = null
+ private var bleInfo = "BLE not started"
  private val permissions = arrayOf(
   Manifest.permission.ACTIVITY_RECOGNITION,
   "android.permission.health.READ_HEART_RATE"
@@ -218,11 +1036,127 @@ class MainActivity : Activity(), SensorEventListener {
    prefs.edit().putString("device_id", "wearos_" + UUID.randomUUID().toString().replace("-", "")).apply()
   }
   manager = getSystemService(SENSOR_SERVICE) as SensorManager
+  mqtt = WatchMqtt(this) { msg -> runOnUiThread { mqttInfo = msg; refresh() } }
+  if (prefs.getBoolean("ble_enabled", false)) startBle()
   showHome()
   requestMissingPermissions()
   refresh()
  }
 
+ private fun startBle() {
+  if (Build.VERSION.SDK_INT >= 31) {
+   val needed = listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE)
+    .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+   if (needed.isNotEmpty()) {
+    bleInfo = "Grant Bluetooth permissions and tap BLE GATT again"
+    requestPermissions(needed.toTypedArray(), 102)
+    refresh()
+    return
+   }
+  }
+  if (bleServer == null) bleServer = WatchBleServer(this) { msg ->
+   runOnUiThread { bleInfo = msg; refresh() }
+  }
+  bleServer?.start()
+ }
+ private fun stopSamsungTrackerTest() {
+  trackerTestGeneration++
+  val previous = activeTrackerName
+  activeTrackerName = null
+  spo2Probe?.stop()
+  spo2Probe = null
+  if (previous != null) {
+   samsungTrackerTestResult = "$previous: остановлено, событий $trackerSampleCount" +
+    if (trackerSamplePreviews.isNotEmpty()) "\nПервые образцы:\n" + trackerSamplePreviews.joinToString("\n") else ""
+  }
+  refresh()
+ }
+ private fun parseBirthDate(value: String?): LocalDate? = try {
+  value?.let { LocalDate.parse(it, DateTimeFormatter.ISO_LOCAL_DATE) }
+ } catch (_: DateTimeParseException) { null }
+ private fun bodyProfile(): SamsungTrackerProbe.BodyProfile? {
+  val h = prefs.getString("body_height", null)?.toFloatOrNull() ?: return null
+  val w = prefs.getString("body_weight", null)?.toFloatOrNull() ?: return null
+  val birthday = parseBirthDate(prefs.getString("body_birth_date", null)) ?: return null
+  val a = Period.between(birthday, LocalDate.now()).years
+  if (h !in 100f..250f || w !in 20f..300f || a !in 18..120) return null
+  return SamsungTrackerProbe.BodyProfile(h, w, prefs.getInt("body_gender", 1), a)
+ }
+ private fun startSamsungTrackerTest(tracker: String) {
+  stopSamsungTrackerTest()
+  activeTrackerName = tracker
+  trackerSampleCount = 0
+  trackerSamplePreviews.clear()
+  trackerLastUiUpdate = 0L
+  if (tracker != "ECG") measurementProgress = 0
+  biaSavedForRun = false
+  measurementMessage = "Ожидание данных датчика…"
+  measurementPreview = ""
+  updateMeasurementUi()
+  val generation = trackerTestGeneration
+  val probe = SamsungTrackerProbe(this, tracker, if (tracker == "BIA") bodyProfile() else null,
+   if (tracker == "ECG") ({ value: Float, contact: Int, time: Long -> receiveEcgSample(value, contact, time) }) else null
+  ) { message ->
+   if (generation != trackerTestGeneration || activeTrackerName != tracker) return@SamsungTrackerProbe
+   if (tracker == "BIA" && message.startsWith("BIA samples=")) {
+    val status = Regex("status=(-?\\d+)").find(message)?.groupValues?.get(1)?.toIntOrNull()
+    val progress = Regex("progress=([0-9.]+)").find(message)?.groupValues?.get(1)?.toFloatOrNull()
+    runOnUiThread {
+     if (generation != trackerTestGeneration) return@runOnUiThread
+     if (status != null && !biaSavedForRun) measurementMessage = biaMessage(status)
+     if (status == 0 && progress != null && !biaSavedForRun) {
+      measurementProgress = (progress * 100f).toInt().coerceIn(0, 100)
+      if (measurementProgress >= 100) {
+       measurementMessage = "Измерение завершено"
+       measurementPreview = biaSummary(message)
+       if (!biaSavedForRun) {
+        biaSavedForRun = true
+        saveBiaResult(message)
+       }
+      } else if (!biaSavedForRun) {
+       measurementPreview = ""
+      }
+     }
+     updateMeasurementUi()
+    }
+   } else if (message.startsWith("$tracker samples=")) {
+    trackerSampleCount++
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (now - trackerLastUiUpdate >= 1000L) {
+     trackerLastUiUpdate = now
+     runOnUiThread {
+      if (generation == trackerTestGeneration) {
+       if (tracker != "ECG") {
+        measurementMessage = "Получение данных…"
+        measurementPreview = "Событий: $trackerSampleCount"
+       }
+       updateMeasurementUi()
+      }
+     }
+    }
+   } else if (message.contains("failed", true) || message.contains("error", true) ||
+              message.contains("timeout", true) || message.contains("bindService returned false")) {
+    runOnUiThread {
+     if (generation == trackerTestGeneration && !(tracker == "BIA" && biaSavedForRun)) {
+      measurementMessage = "Ошибка: " + message.take(100)
+      updateMeasurementUi()
+     }
+    }
+   }
+  }
+  spo2Probe = probe
+  probe.start()
+ }
+ private fun publishSpO2FromProbe(message: String): String? {
+  val match = Regex("SPO2 status=(-?\\d+) value=(\\d+) pulse=(\\d+) accuracy=(-?\\d+) timestamp=(\\d+)", RegexOption.IGNORE_CASE).find(message) ?: return null
+  val (status, oxygen, pulse, _, timestamp) = match.destructured
+  val spo2 = oxygen.toIntOrNull() ?: return null
+  // Only status 2 with a real, non-zero oxygen reading is a valid result.
+  if (status != "2" || spo2 !in 1..100) return null
+  val bpm = pulse.toIntOrNull() ?: 0
+  bleServer?.publish(spo2, bpm, timestamp.toLong())
+  return "SpO₂: $spo2%  |  Пульс: $bpm"
+ }
  private fun requestMissingPermissions() {
   val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
   if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 100)
@@ -308,7 +1242,7 @@ class MainActivity : Activity(), SensorEventListener {
   Log.i("WatchBridgeHC", "API=${Build.VERSION.SDK_INT}, class=${hcByClass?.javaClass?.name ?: "null"}, name=${hcByName?.javaClass?.name ?: "null"}")
   val hc = hcByClass ?: (hcByName as? HealthConnectManager)
   if (hc == null) {
-   healthConnectInfo = "Health Connect service unavailable\\n" +
+   healthConnectInfo = "Health Connect service unavailable\n" +
     "API: ${Build.VERSION.SDK_INT}\\n" +
     "By class: ${hcByClass?.javaClass?.name ?: "null"}\\n" +
     "By name: ${hcByName?.javaClass?.name ?: "null"}"
@@ -480,13 +1414,13 @@ class MainActivity : Activity(), SensorEventListener {
  }
 
  private fun refresh() {
-  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = steps?.toInt()?.toString() ?: "—" }
-  if (screen != "diagnostics" || !::output.isInitialized) return
+  if (screen == "home") { heartValue?.text = heart?.toInt()?.toString() ?: "—"; stepsValue?.text = "♟  " + (todaySteps()?.toString() ?: "—") }
+  if (screen != "system_diagnostics" || !::output.isInitialized) return
   output.text = "Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n" +
      "Heart rate: ${heart?.toString() ?: "waiting"} bpm\n" +
      "Step counter: ${steps?.toInt()?.toString() ?: "waiting"} (since reboot)\n\n" +
      "Sensors:\n$sensorInfo\n\nSamsung provider:\n$providerInfo\n\n" +
-     "Health Connect:\n$healthConnectInfo\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
+     "Health Connect:\n$healthConnectInfo\n\nBLE:\n$bleInfo\n\nSpO₂:\n$spo2Result\n\nSamsung tracker test:\n$samsungTrackerTestResult\n\nSamsung services:\n$samsungServicesInfo\n\nNo data sent to MQTT."
  }
 
  override fun onSensorChanged(event: SensorEvent) {
@@ -494,9 +1428,19 @@ class MainActivity : Activity(), SensorEventListener {
   when (event.sensor.type) {
    Sensor.TYPE_HEART_RATE -> {
     val bpm = event.values[0]
-    if (bpm.isFinite() && bpm > 0f) heart = bpm
+    if (bpm.isFinite() && bpm in 25f..240f) {
+     heart = bpm
+     if (pulseAnimating && screen == "home") {
+      prefs.edit().putString("last_heart", "${bpm.toInt()} уд/мин").apply()
+      saveVital("heart", bpm.toInt())
+      renderHeartButton()
+     }
+    }
    }
-   Sensor.TYPE_STEP_COUNTER -> steps = event.values[0]
+   Sensor.TYPE_STEP_COUNTER -> {
+    steps = event.values[0]
+    recordStepCounter(event.values[0])
+   }
   }
   refresh()
  }
@@ -504,6 +1448,8 @@ class MainActivity : Activity(), SensorEventListener {
  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
  override fun onDestroy() {
   spo2Probe?.stop()
+  bleServer?.stop()
+  mqtt?.close()
   for (connection in samsungConnections) try { unbindService(connection) } catch (_: Exception) {}
   samsungConnections.clear()
   super.onDestroy()
